@@ -46,7 +46,7 @@ export async function GET(
     } else {
       const data = await res.json();
       
-      // Try to fetch uptime_30d.json if applicable (standard statuspage)
+      // Try to fetch uptime_15d.json if applicable (standard statuspage)
       try {
         const uptimeUrl = vendorConfig.apiUrl.replace("summary.json", "uptime_30d.json");
         const uptimeRes = await fetch(uptimeUrl, { next: { revalidate: 60 } });
@@ -78,7 +78,7 @@ export async function GET(
       fetchedAt: new Date().toISOString(),
       overallStatus: "unknown",
       statusDescription: "Failed to fetch status",
-      uptimePct30d: 100,
+      uptimePct15d: 100,
       uptimeHistory: [],
       activeIncidents: [],
       scheduledMaintenances: [],

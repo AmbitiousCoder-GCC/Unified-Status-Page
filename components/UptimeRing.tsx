@@ -50,7 +50,7 @@ export const UptimeRing = ({ uptimePct }: { uptimePct: number }) => {
           {uptimePct.toFixed(2)}%
         </span>
         <span className="text-[9px] uppercase tracking-wider text-text-muted mt-1 font-orbitron">
-          30-Day Uptime
+          15-Day Uptime
         </span>
       </div>
     </div>

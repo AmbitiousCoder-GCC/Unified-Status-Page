@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
             fetchedAt: new Date().toISOString(),
             overallStatus: "unknown",
             statusDescription: "Failed to fetch status",
-            uptimePct30d: 100,
+            uptimePct15d: 100,
             uptimeHistory: [],
             activeIncidents: [],
             scheduledMaintenances: [],

@@ -7,11 +7,11 @@ export function calculateAverageUptime(days: DayUptime[]): number {
 }
 
 // Fallback for calculating uptime from incidents
-export function calculateUptimeFromIncidents(incidents: Incident[], days = 30): number {
+export function calculateUptimeFromIncidents(incidents: Incident[], days = 15): number {
   if (!incidents || incidents.length === 0) return 100;
   
   const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  const fifteenDaysAgo = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   
   let totalDowntimeSeconds = 0;
   
@@ -24,8 +24,8 @@ export function calculateUptimeFromIncidents(incidents: Incident[], days = 30): 
     const end = inc.resolvedAt ? new Date(inc.resolvedAt) : now;
     if (isNaN(end.getTime())) return;
     
-    // Only count downtime within the last 30 days
-    const effectiveStart = start < thirtyDaysAgo ? thirtyDaysAgo : start;
+    // Only count downtime within the last 15 days
+    const effectiveStart = start < fifteenDaysAgo ? fifteenDaysAgo : start;
     const effectiveEnd = end > now ? now : end;
 
     if (effectiveEnd > effectiveStart) {
@@ -48,7 +48,7 @@ export function calculateUptimeFromIncidents(incidents: Incident[], days = 30): 
 
 export function generateMockUptimeHistory(uptime: number): DayUptime[] {
   const history: DayUptime[] = [];
-  for (let i = 29; i >= 0; i--) {
+  for (let i = 14; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     // Add some random noise for visual variety

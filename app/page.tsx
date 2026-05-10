@@ -92,7 +92,7 @@ export default function Dashboard() {
         return nameA.localeCompare(nameB);
       }
       if (sortBy === "uptime") {
-        return a.uptimePct30d - b.uptimePct30d; // Lowest uptime first
+        return a.uptimePct15d - b.uptimePct15d; // Lowest uptime first
       }
       if (sortBy === "severity") {
         const severityScore = (s: VendorStatus) => {

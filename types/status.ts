@@ -34,7 +34,7 @@ export interface VendorStatus {
   fetchedAt: string
   overallStatus: StatusLevel
   statusDescription: string
-  uptimePct30d: number
+  uptimePct15d: number
   uptimeHistory: DayUptime[]
   activeIncidents: Incident[]
   scheduledMaintenances: Incident[]

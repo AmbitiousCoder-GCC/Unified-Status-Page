@@ -95,7 +95,7 @@ export const VendorCard = ({ status, index, onClick }: VendorCardProps) => {
       </div>
 
       {/* UPTIME RING */}
-      <UptimeRing uptimePct={status.uptimePct30d} />
+      <UptimeRing uptimePct={status.uptimePct15d} />
 
       {/* SPARKLINE */}
       <UptimeSparkline data={status.uptimeHistory} color={vendorConfig.accentColor} />

@@ -61,19 +61,19 @@ export const parseStatuspage = (id: string, data: any): VendorStatus => {
     url: inc.shortlink
   }));
 
-  // Fallback uptime if uptime_30d is not injected before this function
-  const uptimePct30d = data.uptimePct30d !== undefined 
-    ? data.uptimePct30d 
-    : calculateUptimeFromIncidents(activeIncidents, 30);
+  // Fallback uptime if uptime_15d is not injected before this function
+  const uptimePct15d = data.uptimePct15d !== undefined 
+    ? data.uptimePct15d 
+    : calculateUptimeFromIncidents(activeIncidents, 15);
     
-  const uptimeHistory = data.uptimeHistory || generateMockUptimeHistory(uptimePct30d);
+  const uptimeHistory = data.uptimeHistory || generateMockUptimeHistory(uptimePct15d);
 
   return {
     vendorId: id,
     fetchedAt: new Date().toISOString(),
     overallStatus,
     statusDescription,
-    uptimePct30d,
+    uptimePct15d,
     uptimeHistory,
     activeIncidents,
     scheduledMaintenances,
@@ -84,9 +84,9 @@ export const parseStatuspage = (id: string, data: any): VendorStatus => {
 export const parseGcp = (id: string, data: any[]): VendorStatus => {
   // GCP returns an array of incidents
   const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const fifteenDaysAgo = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
   
-  const recentIncidents = data.filter((inc: any) => new Date(inc.begin) >= thirtyDaysAgo);
+  const recentIncidents = data.filter((inc: any) => new Date(inc.begin) >= fifteenDaysAgo);
   const activeIncidentsRaw = data.filter((inc: any) => !inc.end || new Date(inc.end) > now);
   
   const overallStatus: StatusLevel = activeIncidentsRaw.length > 0 ? "partial_outage" : "operational";
@@ -107,14 +107,14 @@ export const parseGcp = (id: string, data: any[]): VendorStatus => {
     url: inc.uri
   }));
 
-  const uptimePct30d = calculateUptimeFromIncidents(
+  const uptimePct15d = calculateUptimeFromIncidents(
     recentIncidents.map((inc: any) => ({
       ...inc,
       startedAt: inc.begin,
       resolvedAt: inc.end,
       severity: inc.severity === "high" ? "major" : "minor"
     })), 
-    30
+    15
   );
 
   return {
@@ -122,8 +122,8 @@ export const parseGcp = (id: string, data: any[]): VendorStatus => {
     fetchedAt: new Date().toISOString(),
     overallStatus,
     statusDescription,
-    uptimePct30d,
-    uptimeHistory: generateMockUptimeHistory(uptimePct30d),
+    uptimePct15d,
+    uptimeHistory: generateMockUptimeHistory(uptimePct15d),
     activeIncidents,
     scheduledMaintenances: [],
     components: []
@@ -168,7 +168,7 @@ export const parseAzureRss = (id: string, xmlString: string): VendorStatus => {
     fetchedAt: new Date().toISOString(),
     overallStatus,
     statusDescription: activeIncidents.length > 0 ? "Azure Services Degraded" : "All Systems Operational",
-    uptimePct30d: 99.99, // Best effort estimation without deep RSS parsing
+    uptimePct15d: 99.99, // Best effort estimation without deep RSS parsing
     uptimeHistory: generateMockUptimeHistory(99.99),
     activeIncidents,
     scheduledMaintenances: [],
