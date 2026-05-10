@@ -99,5 +99,14 @@ export const VENDORS = [
     logoUrl: "/logos/cycode.svg",
     accentColor: "#7C3AED",
     description: "AppSec Platform"
+  },
+  {
+    id: "coralogix",
+    name: "Coralogix",
+    statusUrl: "https://status.coralogix.com/",
+    apiUrl: "https://status.coralogix.com/api/v2/summary.json",
+    logoUrl: "/logos/coralogix.svg",
+    accentColor: "#5436d6",
+    description: "Observability Platform"
   }
 ]
