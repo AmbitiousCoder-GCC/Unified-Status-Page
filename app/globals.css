@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-base: #f0f7ff;
+    --bg-surface: #ffffff;
+    --bg-card: #e8f2ff;
+    --accent-primary: #0066cc;
+    --accent-secondary: #6600cc;
+    --accent-warn: #cc4400;
+    --accent-danger: #cc0033;
+    --accent-success: #007744;
+    --text-primary: #0a1a3a;
+    --text-muted: #4a6080;
+    --border-glow: rgba(0, 102, 204, 0.3);
+    --grid-line: rgba(0, 102, 204, 0.08);
+  }
+
+  [data-theme='dark'] {
+    --bg-base: #020818;
+    --bg-surface: #050f2a;
+    --bg-card: #0a1a3a;
+    --accent-primary: #00f0ff;
+    --accent-secondary: #7b2fff;
+    --accent-warn: #ff6b35;
+    --accent-danger: #ff2b5e;
+    --accent-success: #00ff88;
+    --text-primary: #e8f4ff;
+    --text-muted: #4a7fa0;
+    --border-glow: rgba(0, 240, 255, 0.3);
+    --grid-line: rgba(0, 240, 255, 0.06);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+    transition: background 0.4s, color 0.4s;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  .bg-grid-pattern {
+    background-size: 40px 40px;
+    background-image: 
+      linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  }
+  
+  .glass-card {
+    background-color: var(--bg-card);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border-glow);
+  }
+}
+
+/* Scanline Effect for dark mode */
+[data-theme='dark'] .scanlines::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 50%,
+    rgba(0, 0, 0, 0.25) 51%
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 50;
+}
