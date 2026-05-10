@@ -24,6 +24,7 @@ const config: Config = {
           muted: "var(--text-muted)",
         },
         "border-glow": "var(--border-glow)",
+        border: "var(--border)",
       },
       fontFamily: {
         orbitron: ["var(--font-orbitron)"],

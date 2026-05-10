@@ -15,6 +15,7 @@
     --text-primary: #0a1a3a;
     --text-muted: #4a6080;
     --border-glow: rgba(0, 102, 204, 0.3);
+    --border: rgba(0, 102, 204, 0.2);
     --grid-line: rgba(0, 102, 204, 0.08);
   }
 
@@ -30,6 +31,7 @@
     --text-primary: #e8f4ff;
     --text-muted: #4a7fa0;
     --border-glow: rgba(0, 240, 255, 0.3);
+    --border: rgba(0, 240, 255, 0.2);
     --grid-line: rgba(0, 240, 255, 0.06);
   }
 }

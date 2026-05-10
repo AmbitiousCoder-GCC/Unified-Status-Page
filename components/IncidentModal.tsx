@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { VendorStatus } from "@/types/status";
 import { AlertTriangle, X, ExternalLink, Activity } from "lucide-react";
