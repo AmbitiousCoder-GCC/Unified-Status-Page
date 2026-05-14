@@ -79,7 +79,7 @@ export function ChatBot() {
           <div className="relative z-10 flex items-center justify-between px-4 py-3 border-b border-[var(--border-glow)] bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] rounded-none shrink-0 shadow-[0_4px_20px_rgba(6,182,212,0.1)]">
             <div className="flex items-center gap-2">
               <MessageCircle className="h-5 w-5 animate-[hud-pulse_3s_infinite]" />
-              <span className="font-orbitron font-bold tracking-widest text-sm text-[var(--text-primary)]" style={{ textShadow: '0 0 8px var(--accent-primary)' }}>NEXUS // AI LINK</span>
+              <span className="font-orbitron font-bold tracking-widest text-sm text-[var(--text-primary)]" style={{ textShadow: '0 0 8px var(--accent-primary)' }}>NEXUS</span>
               <span className="text-[10px] font-spacemono border border-[var(--accent-primary)] rounded px-1.5 py-0.5 ml-1 text-[var(--accent-primary)] bg-[var(--accent-primary)]/10">SYS.ONLINE</span>
             </div>
             <button
