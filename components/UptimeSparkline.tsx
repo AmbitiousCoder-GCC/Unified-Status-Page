@@ -45,7 +45,7 @@ export const UptimeSparkline = ({
             }}
           />
           <Area 
-            type="stepAfter" 
+            type="monotone" 
             dataKey="uptimePct" 
             stroke={color} 
             strokeWidth={2}

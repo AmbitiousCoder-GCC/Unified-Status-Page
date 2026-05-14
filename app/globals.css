@@ -23,11 +23,11 @@
     --bg-base: #020617; /* Deep midnight */
     --bg-surface: #0f172a; /* Slate 900 */
     --bg-card: #0b1120; /* Very dark slate */
-    --accent-primary: #06b6d4; /* Cyan 500 */
-    --accent-secondary: #3b82f6; /* Blue 500 */
-    --accent-warn: #f59e0b; /* Amber 500 */
-    --accent-danger: #ef4444; /* Red 500 */
-    --accent-success: #10b981; /* Emerald 500 */
+    --accent-primary: #00ffff; /* Neon Cyan */
+    --accent-secondary: #ff00ff; /* Neon Magenta */
+    --accent-warn: #ffaa00; /* Neon Amber */
+    --accent-danger: #ff003c; /* Neon Red */
+    --accent-success: #00ff66; /* Neon Green */
     --text-primary: #f8fafc;
     --text-muted: #64748b;
     --border-glow: rgba(6, 182, 212, 0.4);
