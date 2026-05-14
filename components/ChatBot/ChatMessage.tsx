@@ -62,13 +62,13 @@ export function ChatMessage({ message }: Props) {
     <div className={clsx('flex w-full', isUser ? 'justify-end' : 'justify-start')}>
       <div
         className={clsx(
-          'max-w-[87%] rounded-2xl px-4 py-3 text-sm break-words',
+          'max-w-[87%] rounded-none px-4 py-3 text-[13px] font-spacemono font-semibold tracking-wide break-words border',
           isUser
-            ? 'bg-blue-600 text-white rounded-br-sm whitespace-pre-wrap'
-            : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-sm'
+            ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border-[var(--accent-primary)] shadow-[0_0_10px_rgba(6,182,212,0.2)] whitespace-pre-wrap'
+            : 'bg-[var(--bg-surface)]/40 text-[var(--text-primary)] border-[var(--border-glow)] shadow-[inset_0_0_10px_rgba(6,182,212,0.05)]'
         )}
       >
-        {isUser ? message.content : renderMarkdown(message.content)}
+        {isUser ? `> ${message.content}` : renderMarkdown(message.content)}
       </div>
     </div>
   );

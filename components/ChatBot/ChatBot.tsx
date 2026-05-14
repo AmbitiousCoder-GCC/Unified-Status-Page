@@ -54,9 +54,9 @@ export function ChatBot() {
         aria-label={isOpen ? 'Close status bot' : 'Open status bot'}
         className={clsx(
           'fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center',
-          'rounded-full shadow-lg transition-all duration-200',
-          'bg-blue-600 hover:bg-blue-700 text-white',
-          isOpen && 'rotate-90'
+          'rounded-full shadow-[0_0_20px_var(--accent-primary)] transition-all duration-300',
+          'bg-[var(--accent-primary)] hover:bg-[#0891b2] text-black border-2 border-transparent hover:border-white/50',
+          isOpen && 'rotate-90 scale-90 opacity-70'
         )}
       >
         {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
@@ -68,28 +68,31 @@ export function ChatBot() {
           className={clsx(
             'fixed bottom-24 right-6 z-50 flex flex-col',
             'w-[380px] max-w-[calc(100vw-3rem)] h-[520px] max-h-[calc(100vh-8rem)]',
-            'rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700',
-            'bg-white dark:bg-gray-900 overflow-hidden'
+            'rounded-none border border-[var(--border-glow)] overflow-hidden',
+            'hologram-window animate-[hologram_4s_infinite_alternate]'
           )}
         >
+          {/* Internal Scanline Overlay */}
+          <div className="absolute inset-0 pointer-events-none opacity-20 bg-[linear-gradient(transparent_50%,rgba(0,0,0,0.5)_51%)] bg-[length:100%_4px] z-0" />
+          <div className="absolute inset-0 pointer-events-none opacity-10 bg-[linear-gradient(to_bottom,transparent,var(--accent-primary),transparent)] bg-[length:100%_100%] animate-[scanline_8s_linear_infinite] z-0" />
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-blue-600 text-white rounded-t-2xl shrink-0">
+          <div className="relative z-10 flex items-center justify-between px-4 py-3 border-b border-[var(--border-glow)] bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] rounded-none shrink-0 shadow-[0_4px_20px_rgba(6,182,212,0.1)]">
             <div className="flex items-center gap-2">
-              <MessageCircle className="h-5 w-5" />
-              <span className="font-semibold text-sm">Nexus Status Bot</span>
-              <span className="text-xs bg-white/20 rounded-full px-2 py-0.5">AI</span>
+              <MessageCircle className="h-5 w-5 animate-[hud-pulse_3s_infinite]" />
+              <span className="font-orbitron font-bold tracking-widest text-sm text-[var(--text-primary)]" style={{ textShadow: '0 0 8px var(--accent-primary)' }}>NEXUS // AI LINK</span>
+              <span className="text-[10px] font-spacemono border border-[var(--accent-primary)] rounded px-1.5 py-0.5 ml-1 text-[var(--accent-primary)] bg-[var(--accent-primary)]/10">SYS.ONLINE</span>
             </div>
             <button
               onClick={clearChat}
               title="Clear chat"
-              className="text-white/70 hover:text-white transition-colors"
+              className="text-[var(--accent-primary)]/70 hover:text-[var(--accent-primary)] transition-colors"
             >
               <Trash2 className="h-4 w-4" />
             </button>
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
+          <div className="relative z-10 flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0 scrollbar-thin scrollbar-thumb-[var(--accent-primary)] scrollbar-track-transparent">
             {messages.map((msg) => (
               <ChatMessage key={msg.id} message={msg} />
             ))}
@@ -105,22 +108,22 @@ export function ChatBot() {
 
           {/* Suggestions (shown when only the welcome message is present) */}
           {messages.length === 1 && (
-            <div className="px-4 pb-2 flex flex-wrap gap-2 shrink-0">
+            <div className="relative z-10 px-4 pb-2 flex flex-wrap gap-2 shrink-0">
               {SUGGESTED.map((s) => (
                 <button
                   key={s}
                   onClick={() => { sendMessage(s); }}
-                  className="text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-3 py-1 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                  className="font-spacemono text-[10px] border border-[var(--border-glow)] bg-[var(--bg-surface)]/50 text-[var(--text-muted)] hover:text-[var(--accent-primary)] hover:border-[var(--accent-primary)] rounded-none px-3 py-1.5 transition-all duration-300 hover:shadow-[0_0_10px_var(--border-glow)]"
                 >
-                  {s}
+                  &gt; {s}
                 </button>
               ))}
             </div>
           )}
 
           {/* Input */}
-          <div className="px-3 pb-3 pt-2 border-t border-gray-200 dark:border-gray-700 shrink-0">
-            <div className="flex items-end gap-2 bg-gray-50 dark:bg-gray-800 rounded-xl px-3 py-2">
+          <div className="relative z-10 px-3 pb-3 pt-2 border-t border-[var(--border-glow)] shrink-0 bg-[var(--bg-surface)]/30">
+            <div className="flex items-end gap-2 bg-[var(--bg-base)]/50 border border-[var(--border-glow)] rounded-none px-3 py-2 focus-within:border-[var(--accent-primary)] focus-within:shadow-[0_0_10px_var(--border-glow)] transition-all">
               <textarea
                 ref={inputRef}
                 rows={1}
@@ -130,8 +133,8 @@ export function ChatBot() {
                 placeholder="Ask about vendor status..."
                 disabled={isLoading}
                 className={clsx(
-                  'flex-1 resize-none bg-transparent text-sm text-gray-900 dark:text-gray-100',
-                  'placeholder-gray-400 focus:outline-none max-h-28 overflow-y-auto',
+                  'flex-1 resize-none bg-transparent font-spacemono text-[11px] text-[var(--text-primary)]',
+                  'placeholder-[var(--text-muted)] focus:outline-none max-h-28 overflow-y-auto',
                   'disabled:opacity-50'
                 )}
                 style={{ lineHeight: '1.5' }}
@@ -141,18 +144,25 @@ export function ChatBot() {
                 disabled={!input.trim() || isLoading}
                 aria-label="Send message"
                 className={clsx(
-                  'flex h-8 w-8 items-center justify-center rounded-lg transition-colors shrink-0',
+                  'flex h-8 w-8 items-center justify-center rounded-none transition-colors shrink-0 border',
                   input.trim() && !isLoading
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
+                    ? 'bg-[var(--accent-primary)]/20 border-[var(--accent-primary)] text-[var(--accent-primary)] hover:bg-[var(--accent-primary)] hover:text-black shadow-[0_0_10px_var(--accent-primary)]'
+                    : 'bg-transparent border-transparent text-[var(--text-muted)] cursor-not-allowed'
                 )}
               >
                 <Send className="h-4 w-4" />
               </button>
             </div>
-            <p className="text-[10px] text-gray-400 mt-1 text-center">
-              Powered by vendor status APIs · Data updated every 5 min
-            </p>
+            <div className="flex items-center justify-between mt-1.5 px-1">
+              <div className="flex gap-1">
+                <span className="w-1.5 h-1.5 bg-[var(--accent-primary)] animate-pulse rounded-full"></span>
+                <span className="w-1.5 h-1.5 bg-[var(--accent-primary)] animate-pulse rounded-full" style={{ animationDelay: '0.2s' }}></span>
+                <span className="w-1.5 h-1.5 bg-[var(--accent-primary)] animate-pulse rounded-full" style={{ animationDelay: '0.4s' }}></span>
+              </div>
+              <p className="font-spacemono text-[9px] text-[var(--text-muted)] uppercase tracking-widest">
+                SECURE UPLINK ESTABLISHED
+              </p>
+            </div>
           </div>
         </div>
       )}

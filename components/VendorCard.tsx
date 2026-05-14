@@ -46,12 +46,22 @@ export const VendorCard = ({ status, index, onClick }: VendorCardProps) => {
       tabIndex={0}
       role="button"
       aria-label={`View status details for ${vendorConfig.name}`}
-      className={`relative glass-card rounded-xl p-5 cursor-pointer overflow-hidden transition-all duration-300 group outline-none focus-visible:ring-2 focus-visible:ring-accent-primary
-        ${status.activeIncidents.length > 0 ? "border-[var(--accent-danger)] animate-[pulse_2s_ease-in-out_infinite]" : "border-border-glow hover:border-[var(--accent-primary)]"}`}
+      className={`relative glass-card rounded-none border-t border-[var(--border-glow)] bg-[var(--bg-surface)]/20 p-5 cursor-pointer overflow-hidden transition-all duration-300 group outline-none focus-visible:ring-2 focus-visible:ring-accent-primary
+        ${status.activeIncidents.length > 0 ? "border-t-[var(--accent-danger)] animate-[pulse_2s_ease-in-out_infinite]" : "hover:border-t-[var(--hover-border)] hover:bg-[var(--bg-card)]/40 hover:shadow-[0_-5px_15px_-5px_var(--hover-border)]"}`}
       style={{
-        "--hover-border": vendorConfig.accentColor
+        "--hover-border": vendorConfig.accentColor,
       } as React.CSSProperties}
     >
+      {/* HUD Corner Brackets - Reduced Opacity for cleaner look */}
+      <svg className="absolute top-0 left-0 w-3 h-3 opacity-20 group-hover:opacity-60 transition-opacity" style={{ stroke: vendorConfig.accentColor }} fill="none" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="1.5" d="M4 12V4h8" /></svg>
+      <svg className="absolute top-0 right-0 w-3 h-3 opacity-20 group-hover:opacity-60 transition-opacity" style={{ stroke: vendorConfig.accentColor }} fill="none" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="1.5" d="M20 12V4h-8" /></svg>
+      <svg className="absolute bottom-0 left-0 w-3 h-3 opacity-20 group-hover:opacity-60 transition-opacity" style={{ stroke: vendorConfig.accentColor }} fill="none" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="1.5" d="M4 12v8h8" /></svg>
+      <svg className="absolute bottom-0 right-0 w-3 h-3 opacity-20 group-hover:opacity-60 transition-opacity" style={{ stroke: vendorConfig.accentColor }} fill="none" viewBox="0 0 24 24"><path strokeLinecap="square" strokeWidth="1.5" d="M20 12v8h-8" /></svg>
+      
+      {/* Telemetry ID Overlay - Minimalist */}
+      <div className="absolute top-2 right-4 text-[7px] font-spacemono text-text-muted/30 uppercase pointer-events-none transition-opacity group-hover:opacity-100">
+        ID:{vendorConfig.id.substring(0, 4)}
+      </div>
       {/* Background glow using accent color */}
       <div 
         className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity duration-500 pointer-events-none"
@@ -60,9 +70,10 @@ export const VendorCard = ({ status, index, onClick }: VendorCardProps) => {
 
       {/* HEADER ROW */}
       <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 mt-2">
           {/* We'll use a generic icon placeholder until logos are available or load actual images */}
-          <div className="w-8 h-8 rounded-md bg-surface flex items-center justify-center p-1" style={{ border: `1px solid ${vendorConfig.accentColor}40` }}>
+          <div className="w-8 h-8 bg-surface/50 flex items-center justify-center p-1 relative" style={{ border: `1px solid ${vendorConfig.accentColor}40` }}>
+            <div className="absolute inset-0 opacity-20" style={{ background: `repeating-linear-gradient(45deg, transparent, transparent 2px, ${vendorConfig.accentColor} 2px, ${vendorConfig.accentColor} 4px)` }} />
             {/* Fallback to text if image fails or isn't there */}
             <span className="font-orbitron font-bold text-xs" style={{ color: vendorConfig.accentColor }}>
               {vendorConfig.name.substring(0,2).toUpperCase()}

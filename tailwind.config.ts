@@ -31,6 +31,26 @@ const config: Config = {
         spacemono: ["var(--font-space-mono)"],
         dmsans: ["var(--font-dm-sans)"],
       },
+      keyframes: {
+        "hologram-flicker": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.85" },
+          "25%, 75%": { opacity: "0.95", transform: "translateY(0.5px)" },
+        },
+        "scanline": {
+          "0%": { transform: "translateY(-100%)" },
+          "100%": { transform: "translateY(100%)" },
+        },
+        "hud-pulse": {
+          "0%, 100%": { opacity: "1", filter: "brightness(1)" },
+          "50%": { opacity: "0.7", filter: "brightness(1.5)" },
+        },
+      },
+      animation: {
+        "hologram": "hologram-flicker 4s infinite alternate",
+        "scanline": "scanline 8s linear infinite",
+        "hud-pulse": "hud-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+      },
     },
   },
   plugins: [],
