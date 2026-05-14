@@ -88,13 +88,34 @@ export function getRecentIncidents(
 
 export function searchIncidents(c: IncidentCache, query: string): NormalisedIncident[] {
   const q = query.toLowerCase();
-  return Object.values(c)
-    .flatMap((v) => v.recentIncidents)
+  // Search across both active and recent incidents
+  const allIncidents: NormalisedIncident[] = [];
+  const seen = new Set<string>();
+
+  for (const v of Object.values(c)) {
+    // Include active incidents
+    for (const inc of v.liveStatus.activeIncidents) {
+      if (!seen.has(inc.id)) {
+        seen.add(inc.id);
+        allIncidents.push(inc);
+      }
+    }
+    // Include recent incidents
+    for (const inc of v.recentIncidents) {
+      if (!seen.has(inc.id)) {
+        seen.add(inc.id);
+        allIncidents.push(inc);
+      }
+    }
+  }
+
+  return allIncidents
     .filter(
       (i) =>
         i.name.toLowerCase().includes(q) ||
         i.latestUpdate.toLowerCase().includes(q) ||
-        i.vendorName.toLowerCase().includes(q)
+        i.vendorName.toLowerCase().includes(q) ||
+        i.updates.some((u) => u.body.toLowerCase().includes(q))
     )
     .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
     .slice(0, 30);
