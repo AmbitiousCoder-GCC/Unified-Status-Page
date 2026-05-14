@@ -53,13 +53,17 @@ export function ChatBot() {
         onClick={() => setIsOpen((o) => !o)}
         aria-label={isOpen ? 'Close status bot' : 'Open status bot'}
         className={clsx(
-          'fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center',
+          'fixed bottom-6 right-6 z-50 flex h-14 px-6 items-center justify-center',
           'rounded-full shadow-[0_0_20px_var(--accent-primary)] transition-all duration-300',
-          'bg-[var(--accent-primary)] hover:bg-[#0891b2] text-black border-2 border-transparent hover:border-white/50',
-          isOpen && 'rotate-90 scale-90 opacity-70'
+          'bg-[var(--accent-primary)] hover:bg-[#00cccc] text-black border-2 border-transparent hover:border-white/50',
+          isOpen && 'scale-90 opacity-70'
         )}
       >
-        {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
+        {isOpen ? (
+          <X className="h-6 w-6" />
+        ) : (
+          <span className="font-orbitron font-bold tracking-widest text-lg">NEXUS</span>
+        )}
       </button>
 
       {/* Chat panel */}
