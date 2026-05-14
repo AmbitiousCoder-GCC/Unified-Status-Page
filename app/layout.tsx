@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Orbitron, Space_Mono, DM_Sans } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { ChatBot } from "@/components/ChatBot/ChatBot";
 
 const orbitron = Orbitron({ 
   subsets: ["latin"], 
@@ -49,6 +50,7 @@ export default function RootLayout({
           <div className="min-h-screen scanlines relative overflow-x-hidden">
             <div className="absolute inset-0 bg-grid-pattern opacity-50 z-[-1] pointer-events-none" />
             {children}
+            <ChatBot />
           </div>
         </ThemeProvider>
       </body>
