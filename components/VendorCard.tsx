@@ -113,29 +113,50 @@ export const VendorCard = ({ status, index, onClick }: VendorCardProps) => {
 
       {/* COMPONENT STATUS LIST */}
       <div className="mt-4 space-y-1">
-        {status.components.slice(0, 3).map(comp => (
-          <div key={comp.id} className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
-              <div 
-                className="w-1.5 h-1.5 rounded-full shadow-[0_0_4px_currentColor]"
-                style={{ 
-                  color: comp.status === 'operational' ? 'var(--accent-success)' : 
-                         comp.status.includes('outage') ? 'var(--accent-danger)' : 'var(--accent-warn)',
-                  backgroundColor: 'currentColor'
-                }}
-              />
-              <span className="text-text-primary font-dmsans truncate max-w-[150px]">{comp.name}</span>
-            </div>
-            <span className="font-spacemono text-[10px] text-text-muted">
-              {comp.status === 'operational' ? '100%' : `${comp.uptimePct}%`}
-            </span>
-          </div>
-        ))}
-        {status.components.length > 3 && (
-          <div className="text-[10px] text-text-muted font-spacemono text-center pt-1 opacity-70">
-            + {status.components.length - 3} more systems
-          </div>
-        )}
+        <div className="text-[9px] font-spacemono text-text-muted mb-2 uppercase tracking-widest opacity-80 border-b border-grid-line pb-1">
+          {isOperational ? "AVAILABLE REGIONS" : "AFFECTED REGIONS"}
+        </div>
+        {(() => {
+          const displayComponents = isOperational 
+            ? status.components 
+            : status.components.filter(c => c.status !== 'operational');
+            
+          const visibleComponents = displayComponents.slice(0, 3);
+          const hiddenCount = displayComponents.length - 3;
+
+          return (
+            <>
+              {visibleComponents.map(comp => (
+                <div key={comp.id} className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <div 
+                      className="w-1.5 h-1.5 rounded-full shadow-[0_0_4px_currentColor]"
+                      style={{ 
+                        color: comp.status === 'operational' ? 'var(--accent-success)' : 
+                               comp.status.includes('outage') ? 'var(--accent-danger)' : 'var(--accent-warn)',
+                        backgroundColor: 'currentColor'
+                      }}
+                    />
+                    <span className="text-text-primary font-dmsans truncate max-w-[150px]">{comp.name}</span>
+                  </div>
+                  <span className="font-spacemono text-[10px] text-text-muted">
+                    {comp.status === 'operational' ? '100%' : `${comp.uptimePct}%`}
+                  </span>
+                </div>
+              ))}
+              {hiddenCount > 0 && (
+                <div className="text-[10px] text-text-muted font-spacemono text-center pt-2 opacity-70">
+                  + {hiddenCount} more {isOperational ? 'systems' : 'affected'}
+                </div>
+              )}
+              {displayComponents.length === 0 && !isOperational && (
+                 <div className="text-[10px] text-text-muted font-spacemono text-center pt-2 opacity-70">
+                    Check details for affected systems
+                 </div>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* FOOTER ROW */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { AreaChart, Area, ResponsiveContainer, Tooltip } from "recharts";
+import { AreaChart, Area, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import { DayUptime } from "@/types/status";
 import { motion } from "framer-motion";
 
@@ -25,7 +25,12 @@ export const UptimeSparkline = ({
               <stop offset="5%" stopColor={color} stopOpacity={0.8}/>
               <stop offset="95%" stopColor={color} stopOpacity={0}/>
             </linearGradient>
+            <filter id={`glow-${color.replace('#', '')}`} x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
           </defs>
+          <CartesianGrid strokeDasharray="2 4" stroke="currentColor" vertical={false} opacity={0.1} />
           <Tooltip 
             content={({ active, payload }) => {
               if (active && payload && payload.length) {
@@ -40,11 +45,13 @@ export const UptimeSparkline = ({
             }}
           />
           <Area 
-            type="monotone" 
+            type="stepAfter" 
             dataKey="uptimePct" 
             stroke={color} 
+            strokeWidth={2}
             fillOpacity={1} 
             fill={`url(#color-${color.replace('#', '')})`} 
+            filter={`url(#glow-${color.replace('#', '')})`}
             isAnimationActive={true}
           />
         </AreaChart>
