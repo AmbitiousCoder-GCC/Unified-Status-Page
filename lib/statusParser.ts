@@ -2,6 +2,11 @@ import { VendorStatus, StatusLevel, Incident, ComponentStatus } from "@/types/st
 import { XMLParser } from "fast-xml-parser";
 import { generateMockUptimeHistory, calculateUptimeFromIncidents } from "./uptimeCalc";
 
+const stripHtml = (html: string) => {
+  if (!html) return "";
+  return html.replace(/<[^>]*>?/gm, '');
+};
+
 const mapStatuspageIndicator = (indicator: string): StatusLevel => {
   switch (indicator) {
     case "none": return "operational";
@@ -31,7 +36,7 @@ export const parseStatuspage = (id: string, data: any): VendorStatus => {
 
   const activeIncidents: Incident[] = (data.incidents || []).map((inc: any) => ({
     id: inc.id,
-    title: inc.name,
+    title: stripHtml(inc.name),
     severity: inc.impact === "critical" ? "critical" : inc.impact === "major" ? "major" : "minor",
     status: inc.status,
     startedAt: inc.started_at,
@@ -39,7 +44,7 @@ export const parseStatuspage = (id: string, data: any): VendorStatus => {
     affectedComponents: inc.components?.map((c: any) => c.name) || [],
     updates: inc.incident_updates?.map((u: any) => ({
       timestamp: u.created_at,
-      message: u.body,
+      message: stripHtml(u.body),
       status: u.status
     })) || [],
     url: inc.shortlink

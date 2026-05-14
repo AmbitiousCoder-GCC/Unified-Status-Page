@@ -3,6 +3,11 @@ import { XMLParser } from 'fast-xml-parser';
 import { formatISO } from 'date-fns';
 import type { VendorConfig, NormalisedIncident, VendorLiveStatus } from '@/types/bot';
 
+const stripHtml = (html: string) => {
+  if (!html) return "";
+  return html.replace(/<[^>]*>?/gm, '');
+};
+
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
 
 export async function fetchAzure(
@@ -57,13 +62,13 @@ export async function fetchAzure(
         vendorId: vendor.id,
         vendorName: vendor.displayName,
         externalId: link || String(idx),
-        name: title,
+        name: stripHtml(title),
         status: isResolved ? 'resolved' : 'investigating',
         impact: isCritical ? 'critical' : 'minor',
         startedAt: pubDate,
         resolvedAt: isResolved ? pubDate : null,
         durationMinutes: null,
-        latestUpdate: summary,
+        latestUpdate: stripHtml(summary),
         updates: [],
         source: 'vendor_api',
       };

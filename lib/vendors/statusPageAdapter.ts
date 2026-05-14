@@ -5,6 +5,11 @@
 import { formatISO, parseISO, differenceInMinutes } from 'date-fns';
 import type { VendorConfig, NormalisedIncident, VendorLiveStatus, IncidentUpdate, IncidentStatus, IncidentImpact } from '@/types/bot';
 
+const stripHtml = (html: string) => {
+  if (!html) return "";
+  return html.replace(/<[^>]*>?/gm, '');
+};
+
 const FETCH_TIMEOUT_MS = 6000;
 
 // Statuspage V2 raw types (subset of actual API response)
@@ -62,7 +67,7 @@ function mapIndicatorToStatus(indicator: string): VendorLiveStatus['status'] {
 
 function normaliseIncident(raw: RawIncident, vendor: VendorConfig): NormalisedIncident {
   const updates: IncidentUpdate[] = (raw.incident_updates ?? []).map((u) => ({
-    body: (u.body ?? '').slice(0, 2000),
+    body: stripHtml(u.body ?? '').slice(0, 2000),
     createdAt: u.created_at,
     status: mapStatus(u.status),
   }));
@@ -80,7 +85,7 @@ function normaliseIncident(raw: RawIncident, vendor: VendorConfig): NormalisedIn
     vendorId: vendor.id,
     vendorName: vendor.displayName,
     externalId: raw.id,
-    name: raw.name,
+    name: stripHtml(raw.name),
     status: mapStatus(raw.status),
     impact: mapImpact(raw.impact),
     startedAt,

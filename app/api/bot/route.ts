@@ -38,8 +38,8 @@ async function generateWithGemini(
   question: string,
   history: { role: 'user' | 'assistant'; content: string }[]
 ): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error('GEMINI_API_KEY not set');
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  if (!apiKey) throw new Error('GOOGLE_GENERATIVE_AI_API_KEY not set');
 
   const { google } = await import('@ai-sdk/google');
   const { generateText } = await import('ai');
@@ -53,7 +53,9 @@ async function generateWithGemini(
   ];
 
   const { text } = await generateText({
-    model: google('gemini-1.5-pro-latest'),
+    model: google('gemini-2.0-flash', {
+      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+    }),
     system: systemPrompt,
     messages,
     maxTokens: 800,
@@ -68,7 +70,7 @@ function templateAnswer(question: string, dataContext: string, hasData: boolean)
     return "I don't have that information in my current data. The data may not have loaded yet — please try again in a moment.";
   }
   // Simple template fallback when no LLM key
-  return `Here is the raw data for your question:\n\n${dataContext}\n\n*(AI analysis unavailable — GEMINI_API_KEY not configured)*`;
+  return `Here is the raw data for your question:\n\n${dataContext}`;
 }
 
 export async function POST(req: NextRequest) {

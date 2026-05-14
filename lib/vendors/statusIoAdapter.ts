@@ -2,6 +2,11 @@
 import { formatISO } from 'date-fns';
 import type { VendorConfig, NormalisedIncident, VendorLiveStatus } from '@/types/bot';
 
+const stripHtml = (html: string) => {
+  if (!html) return "";
+  return html.replace(/<[^>]*>?/gm, '');
+};
+
 interface StatusIoIncident {
   ID: string;
   Name: string;
@@ -58,13 +63,13 @@ export async function fetchStatusIo(
         vendorId: vendor.id,
         vendorName: vendor.displayName,
         externalId: inc.ID,
-        name: inc.Name,
+        name: stripHtml(inc.Name),
         status: isResolved ? 'resolved' : 'investigating',
         impact: deriveImpact(inc.CurrentStatus ?? inc.Status),
         startedAt: inc.DateTime,
         resolvedAt: isResolved ? inc.DateTime : null,
         durationMinutes: null,
-        latestUpdate: (inc.Details ?? '').slice(0, 2000),
+        latestUpdate: stripHtml(inc.Details ?? '').slice(0, 2000),
         updates: [],
         source: 'vendor_api',
       };
