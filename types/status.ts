@@ -37,6 +37,7 @@ export interface VendorStatus {
   uptimePct15d: number
   uptimeHistory: DayUptime[]
   activeIncidents: Incident[]
+  pastIncidents: Incident[]
   scheduledMaintenances: Incident[]
   components: ComponentStatus[]
 }

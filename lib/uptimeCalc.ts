@@ -48,14 +48,27 @@ export function calculateUptimeFromIncidents(incidents: Incident[], days = 15): 
 
 export function generateMockUptimeHistory(uptime: number): DayUptime[] {
   const history: DayUptime[] = [];
+  const phase = Math.random() * Math.PI * 2; // Unique wave offset per vendor
+  
   for (let i = 14; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    // Add some random noise for visual variety
-    const noise = (Math.random() - 0.5) * 0.1;
+    
+    let value = uptime;
+    if (uptime >= 99) {
+      // Create a smooth sine-wave-like fluctuation for "healthy" vendors
+      // Fluctuates smoothly to simulate realistic micro-variance
+      const wave = Math.sin((i / 1.5) + phase);
+      value = 99.9 + (wave * 0.1); 
+    } else {
+      // For actual outages, add realistic noise
+      const noise = (Math.random() - 0.5) * 1.5;
+      value = uptime + noise;
+    }
+    
     history.push({
       date: d.toISOString().split('T')[0],
-      uptimePct: Math.min(100, Math.max(0, uptime + noise))
+      uptimePct: Math.min(100, Math.max(0, value))
     });
   }
   return history;

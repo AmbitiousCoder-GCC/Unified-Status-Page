@@ -34,11 +34,11 @@ export const parseStatuspage = (id: string, data: any): VendorStatus => {
       uptimePct: 100 // Default, would come from uptime_30d endpoint if merged
     })).slice(0, 10);
 
-  const activeIncidents: Incident[] = (data.incidents || []).map((inc: any) => ({
+  const allIncidents = (data.incidents || []).map((inc: any) => ({
     id: inc.id,
     title: stripHtml(inc.name),
     severity: inc.impact === "critical" ? "critical" : inc.impact === "major" ? "major" : "minor",
-    status: inc.status,
+    status: inc.status === "resolved" || inc.status === "postmortem" || inc.status === "completed" ? "resolved" : "investigating",
     startedAt: inc.started_at,
     resolvedAt: inc.resolved_at,
     affectedComponents: inc.components?.map((c: any) => c.name) || [],
@@ -49,6 +49,9 @@ export const parseStatuspage = (id: string, data: any): VendorStatus => {
     })) || [],
     url: inc.shortlink
   }));
+
+  const activeIncidents = allIncidents.filter((inc: any) => inc.status !== "resolved");
+  const pastIncidents = allIncidents.filter((inc: any) => inc.status === "resolved").slice(0, 5);
 
   const scheduledMaintenances: Incident[] = (data.scheduled_maintenances || []).map((inc: any) => ({
     id: inc.id,
@@ -81,6 +84,7 @@ export const parseStatuspage = (id: string, data: any): VendorStatus => {
     uptimePct15d,
     uptimeHistory,
     activeIncidents,
+    pastIncidents,
     scheduledMaintenances,
     components
   };
@@ -112,6 +116,19 @@ export const parseGcp = (id: string, data: any[]): VendorStatus => {
     url: inc.uri
   }));
 
+  const pastIncidentsRaw = recentIncidents.filter((inc: any) => inc.end && new Date(inc.end) <= now);
+  const pastIncidents: Incident[] = pastIncidentsRaw.map((inc: any) => ({
+    id: inc.id,
+    title: inc.external_desc,
+    severity: (inc.severity === "high" ? "major" : "minor") as "major" | "minor",
+    status: "resolved" as const,
+    startedAt: inc.begin,
+    resolvedAt: inc.end,
+    affectedComponents: [inc.service_name],
+    updates: [],
+    url: inc.uri
+  })).slice(0, 5);
+
   const uptimePct15d = calculateUptimeFromIncidents(
     recentIncidents.map((inc: any) => ({
       ...inc,
@@ -130,6 +147,7 @@ export const parseGcp = (id: string, data: any[]): VendorStatus => {
     uptimePct15d,
     uptimeHistory: generateMockUptimeHistory(uptimePct15d),
     activeIncidents,
+    pastIncidents,
     scheduledMaintenances: [],
     components: []
   };
@@ -144,25 +162,30 @@ export const parseAzureRss = (id: string, xmlString: string): VendorStatus => {
   
   const now = new Date();
   const activeIncidents: Incident[] = [];
+  const pastIncidents: Incident[] = [];
   
-  // A naive approach: if the latest item does not say "Resolved" or "Mitigated", consider it active.
   itemsArray.slice(0, 5).forEach((item: any) => {
     const title = item.title?.toLowerCase() || "";
-    if (!title.includes("resolved") && !title.includes("mitigated") && !title.includes("information")) {
-      activeIncidents.push({
-        id: item.guid,
-        title: item.title,
-        severity: "major",
-        status: "investigating",
-        startedAt: item.pubDate,
-        affectedComponents: [],
-        updates: [{
-          timestamp: item.pubDate,
-          message: item.description,
-          status: "investigating"
-        }],
-        url: item.link
-      });
+    const isResolved = title.includes("resolved") || title.includes("mitigated");
+    
+    const inc = {
+      id: item.guid,
+      title: item.title,
+      severity: "major" as const,
+      status: isResolved ? "resolved" as const : "investigating" as const,
+      startedAt: item.pubDate,
+      affectedComponents: [],
+      updates: [{
+        timestamp: item.pubDate,
+        message: item.description,
+        status: "investigating"
+      }],
+      url: item.link
+    };
+    if (isResolved) {
+      pastIncidents.push(inc);
+    } else if (!title.includes("information")) {
+      activeIncidents.push(inc);
     }
   });
 
@@ -176,6 +199,7 @@ export const parseAzureRss = (id: string, xmlString: string): VendorStatus => {
     uptimePct15d: 99.99, // Best effort estimation without deep RSS parsing
     uptimeHistory: generateMockUptimeHistory(99.99),
     activeIncidents,
+    pastIncidents,
     scheduledMaintenances: [],
     components: []
   };
@@ -209,16 +233,19 @@ export const parseStatusIo = (id: string, data: any): VendorStatus => {
     uptimePct: 100
   })).slice(0, 10);
 
-  const activeIncidents: Incident[] = (result.incidents || []).map((inc: any) => ({
+  const allIncidents = (result.incidents || []).map((inc: any) => ({
     id: inc._id,
     title: inc.name,
-    severity: "major",
-    status: inc.current_active ? "investigating" : "resolved",
+    severity: "major" as const,
+    status: inc.current_active ? "investigating" as const : "resolved" as const,
     startedAt: inc.datetime_open,
     affectedComponents: [],
     updates: [],
     url: "https://status.gitlab.com"
   }));
+  
+  const activeIncidents = allIncidents.filter((i: any) => i.status !== "resolved");
+  const pastIncidents = allIncidents.filter((i: any) => i.status === "resolved").slice(0, 5);
 
   const uptimePct15d = calculateUptimeFromIncidents(activeIncidents, 15);
 
@@ -230,6 +257,7 @@ export const parseStatusIo = (id: string, data: any): VendorStatus => {
     uptimePct15d,
     uptimeHistory: generateMockUptimeHistory(uptimePct15d),
     activeIncidents,
+    pastIncidents,
     scheduledMaintenances: [],
     components
   };
@@ -281,12 +309,11 @@ export const parseStatuspal = (id: string, data: any): VendorStatus => {
     }
   });
 
-  // Parse active incidents
-  const activeIncidents: Incident[] = incidents.map((inc: any) => ({
+  const allIncidents = incidents.map((inc: any) => ({
     id: String(inc.id || Math.random()),
     title: inc.title || inc.name || "Incident",
-    severity: inc.type === "major" ? "major" : "minor",
-    status: inc.resolved_at ? "resolved" : "investigating",
+    severity: inc.type === "major" ? "major" as const : "minor" as const,
+    status: inc.resolved_at ? "resolved" as const : "investigating" as const,
     startedAt: inc.starts_at || inc.created_at || new Date().toISOString(),
     resolvedAt: inc.resolved_at,
     affectedComponents: (inc.services || []).map((s: any) => s.name || ""),
@@ -297,6 +324,9 @@ export const parseStatuspal = (id: string, data: any): VendorStatus => {
     })),
     url: `https://status.cycode.com`
   }));
+  
+  const activeIncidents = allIncidents.filter((i: any) => i.status !== "resolved");
+  const pastIncidents = allIncidents.filter((i: any) => i.status === "resolved").slice(0, 5);
 
   // Parse scheduled maintenances
   const scheduledMaintenances: Incident[] = maintenances.map((m: any) => ({
@@ -321,6 +351,7 @@ export const parseStatuspal = (id: string, data: any): VendorStatus => {
     uptimePct15d,
     uptimeHistory: generateMockUptimeHistory(uptimePct15d),
     activeIncidents,
+    pastIncidents,
     scheduledMaintenances,
     components: components.slice(0, 10)
   };
@@ -382,6 +413,7 @@ export const parseAuth0Scrape = (id: string, html: string): VendorStatus => {
     uptimePct15d: overallStatus === "operational" ? 100 : 99.9,
     uptimeHistory: generateMockUptimeHistory(overallStatus === "operational" ? 100 : 99.9),
     activeIncidents: [],
+    pastIncidents: [],
     scheduledMaintenances: [],
     components: components.slice(0, 10)
   };

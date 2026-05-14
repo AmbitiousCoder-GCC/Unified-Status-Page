@@ -6,6 +6,7 @@ import { MessageCircle, X, Send, Trash2, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { ChatMessage } from './ChatMessage';
 import { useChatBot } from './useChatBot';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export function ChatBot() {
   const [isOpen, setIsOpen] = useState(false);
@@ -67,10 +68,15 @@ export function ChatBot() {
       </button>
 
       {/* Chat panel */}
-      {isOpen && (
-        <div
-          className={clsx(
-            'fixed bottom-24 right-6 z-50 flex flex-col',
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, scaleY: 0.01, scaleX: 0.8, transformOrigin: "bottom center" }}
+            animate={{ opacity: 1, scaleY: 1, scaleX: 1 }}
+            exit={{ opacity: 0, scaleY: 0.01, scaleX: 0.8 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className={clsx(
+              'fixed bottom-24 right-6 z-50 flex flex-col',
             'w-[380px] max-w-[calc(100vw-3rem)] h-[520px] max-h-[calc(100vh-8rem)]',
             'rounded-none border border-[var(--border-glow)] overflow-hidden',
             'hologram-window animate-[hologram_4s_infinite_alternate]'
@@ -168,8 +174,9 @@ export function ChatBot() {
               </p>
             </div>
           </div>
-        </div>
+        </motion.div>
       )}
+    </AnimatePresence>
     </>
   );
 }

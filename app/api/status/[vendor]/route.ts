@@ -96,6 +96,7 @@ export async function GET(
       uptimePct15d: 100,
       uptimeHistory: [],
       activeIncidents: [],
+      pastIncidents: [],
       scheduledMaintenances: [],
       components: []
     }, { 

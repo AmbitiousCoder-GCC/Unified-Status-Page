@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
             uptimePct15d: 100,
             uptimeHistory: [],
             activeIncidents: [],
+            pastIncidents: [],
             scheduledMaintenances: [],
             components: []
           } as VendorStatus;
