@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { VENDORS } from "@/lib/vendors";
 import { VendorStatus } from "@/types/status";
 
-export const runtime = "edge";
+// export const runtime = "edge";
 export const revalidate = 60; // Cache for 60 seconds
 
 export async function GET(request: NextRequest) {

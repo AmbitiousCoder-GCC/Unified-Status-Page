@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { VENDORS } from "@/lib/vendors";
-import { parseStatuspage, parseGcp, parseAzureRss } from "@/lib/statusParser";
+import { parseStatuspage, parseGcp, parseAzureRss, parseStatusIo, parseStatuspal, parseAuth0Scrape } from "@/lib/statusParser";
 
-export const runtime = "edge";
+// export const runtime = "edge";
 export const revalidate = 60; // Cache for 60 seconds
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { vendor: string } }
+  { params }: { params: Promise<{ vendor: string }> }
 ) {
-  const vendorId = params.vendor;
+  const { vendor: vendorId } = await params;
   const vendorConfig = VENDORS.find(v => v.id === vendorId);
 
   if (!vendorConfig) {
@@ -20,18 +20,27 @@ export async function GET(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
     
+    // Auth0 scrape needs HTML, others need JSON/XML
+    const acceptHeader = vendorConfig.parser === "auth0_scrape" 
+      ? "text/html, */*"
+      : "application/json, text/plain, */*";
+
     const res = await fetch(vendorConfig.apiUrl, {
       signal: controller.signal,
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        "Accept": "application/json"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": acceptHeader,
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": vendorConfig.statusUrl,
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache"
       },
       next: { revalidate: 60 }
     });
     clearTimeout(timeoutId);
 
     if (!res.ok) {
-      throw new Error(`Failed to fetch from ${vendorConfig.apiUrl}`);
+      throw new Error(`Failed to fetch from ${vendorConfig.apiUrl} (status: ${res.status})`);
     }
 
     let statusData;
@@ -41,8 +50,16 @@ export async function GET(
       statusData = parseGcp(vendorConfig.id, data);
     } else if (vendorConfig.parser === "azure_rss") {
       const text = await res.text();
-      console.log(`Raw Azure RSS Feed for ${vendorId}:`, text.substring(0, 500));
       statusData = parseAzureRss(vendorConfig.id, text);
+    } else if (vendorConfig.parser === "status_io") {
+      const data = await res.json();
+      statusData = parseStatusIo(vendorConfig.id, data);
+    } else if (vendorConfig.parser === "statuspal") {
+      const data = await res.json();
+      statusData = parseStatuspal(vendorConfig.id, data);
+    } else if (vendorConfig.parser === "auth0_scrape") {
+      const html = await res.text();
+      statusData = parseAuth0Scrape(vendorConfig.id, html);
     } else {
       const data = await res.json();
       
@@ -53,8 +70,6 @@ export async function GET(
         if (uptimeRes.ok) {
           const uptimeData = await uptimeRes.json();
           // uptimeData usually has daily stats
-          // For simplicity, we skip full parsing here and let parser do fallback if needed
-          // Real implementation would parse this uptimeData properly
         }
       } catch (e) {
         // Ignore uptime fetch errors, fallback to incidents logic

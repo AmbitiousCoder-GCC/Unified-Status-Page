@@ -3,10 +3,11 @@ export const VENDORS = [
     id: "gitlab",
     name: "GitLab",
     statusUrl: "https://status.gitlab.com/",
-    apiUrl: "https://status.gitlab.com/api/v2/summary.json",
+    apiUrl: "https://api.status.io/1.0/status/5b36dc6502d06804c08349f7",
     logoUrl: "/logos/gitlab.svg",
     accentColor: "#FC6D26",
-    description: "DevOps Platform"
+    description: "DevOps Platform",
+    parser: "status_io"
   },
   {
     id: "mongodb",
@@ -49,19 +50,21 @@ export const VENDORS = [
     id: "auth0",
     name: "Auth0",
     statusUrl: "https://status.auth0.com/",
-    apiUrl: "https://status.auth0.com/api/v2/summary.json",
+    apiUrl: "https://status.auth0.com/",
     logoUrl: "/logos/auth0.svg",
     accentColor: "#EB5424",
-    description: "Identity Platform"
+    description: "Identity Platform",
+    parser: "auth0_scrape"
   },
   {
     id: "databricks",
     name: "Azure Databricks",
     statusUrl: "https://status.azuredatabricks.net/",
-    apiUrl: "https://status.azuredatabricks.net/api/v2/summary.json",
+    apiUrl: "https://api.status.io/1.0/status/5d49ec10226b9e13cb6a422e",
     logoUrl: "/logos/databricks.svg",
     accentColor: "#FF3621",
-    description: "Data & AI Platform"
+    description: "Data & AI Platform",
+    parser: "status_io"
   },
   {
     id: "cloudflare",
@@ -95,10 +98,11 @@ export const VENDORS = [
     id: "cycode",
     name: "Cycode",
     statusUrl: "https://status.cycode.com/",
-    apiUrl: "https://status.cycode.com/api/v2/summary.json",
+    apiUrl: "https://statuspal.io/api/v1/status_pages/cycode/status",
     logoUrl: "/logos/cycode.svg",
     accentColor: "#7C3AED",
-    description: "AppSec Platform"
+    description: "AppSec Platform",
+    parser: "statuspal"
   },
   {
     id: "coralogix",
