@@ -120,10 +120,10 @@ export function buildBotContext(question: string, cache: IncidentCache): BotCont
     blocks.push(`## ACTIVE INCIDENTS\nNo active incidents${mentionedVendor ? ` for ${mentionedVendor.displayName}` : ' across any vendor'}.`);
   }
 
-  // ── 4. KEYWORD SEARCH — the core improvement
-  //    Always run a search for non-trivial keywords that might appear inside
-  //    incident names/descriptions even if the vendor isn't directly monitored
-  //    (e.g., "AWS" appears in Snowflake incidents)
+  // ── 4. KEYWORD SEARCH
+  //    Default: search ONLY active/ongoing incidents (real-time)
+  //    Historical search only when user explicitly asks for past data
+  const wantsHistory = intentType === 'history' || intentType === 'search';
   const INTENT_WORDS = new Set([
     'outage', 'incident', 'incidents', 'down', 'active', 'operational',
     'working', 'degraded', 'issue', 'issues', 'problem', 'problems',
@@ -135,7 +135,6 @@ export function buildBotContext(question: string, cache: IncidentCache): BotCont
   const searchTerms = keywords.filter((kw) => !INTENT_WORDS.has(kw));
   let searchResults: NormalisedIncident[] = [];
   if (searchTerms.length > 0) {
-    // Search each keyword and merge results
     const seen = new Set<string>();
     for (const term of searchTerms) {
       const found = searchIncidents(cache, term);
@@ -146,15 +145,34 @@ export function buildBotContext(question: string, cache: IncidentCache): BotCont
         }
       }
     }
+
     if (searchResults.length > 0) {
       sources.push('keyword_search');
-      const top = searchResults.slice(0, 15);
-      blocks.push(`## KEYWORD SEARCH RESULTS (matching: ${searchTerms.join(', ')})\n${top.map((i) => fmtIncident(i, true)).join('\n')}`);
+      // Split into ongoing and resolved
+      const ongoing = searchResults.filter((i) => !i.resolvedAt);
+      const resolved = searchResults.filter((i) => i.resolvedAt);
+
+      if (ongoing.length > 0) {
+        blocks.push(`## ONGOING INCIDENTS matching "${searchTerms.join(', ')}"\n${ongoing.map((i) => fmtIncident(i, true)).join('\n')}`);
+      }
+
+      // Only include resolved/historical if user asked for past data, or if there are no ongoing matches
+      if (wantsHistory || ongoing.length === 0) {
+        const topResolved = resolved.slice(0, 10);
+        if (topResolved.length > 0) {
+          blocks.push(`## RESOLVED INCIDENTS matching "${searchTerms.join(', ')}" (historical)\n${topResolved.map((i) => fmtIncident(i)).join('\n')}`);
+        }
+      }
+
+      // If there were only resolved results and user didn't ask for history, note it
+      if (ongoing.length === 0 && !wantsHistory && resolved.length > 0) {
+        blocks.push(`Note: No ONGOING incidents match "${searchTerms.join(', ')}", but ${resolved.length} resolved (past) incident(s) were found. The user can ask about past incidents if they want details.`);
+      }
     }
   }
 
-  // ── 5. Recent history (when explicitly requested or vendor-specific)
-  if (intentType === 'history' || mentionedVendor) {
+  // ── 5. Recent history — ONLY when explicitly requested
+  if (wantsHistory) {
     const vendorId = mentionedVendor?.id ?? null;
     const recent = getRecentIncidents(cache, vendorId, 20);
     sources.push('incident_history');

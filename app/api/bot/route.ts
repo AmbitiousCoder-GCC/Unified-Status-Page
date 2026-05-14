@@ -95,15 +95,30 @@ function templateAnswer(ctx: BotContext, question: string): string {
   // 2. If keyword search found results (user searching across vendors, e.g. "AWS outage")
   if (pi.searchResults.length > 0) {
     const keyword = pi.keywords.join(', ');
-    const lines = pi.searchResults.slice(0, 8).map((i) => {
-      const status = i.resolvedAt ? '✅ Resolved' : '🔴 Ongoing';
-      const dur = i.durationMinutes ? ` (${i.durationMinutes} min)` : '';
-      return `• ${i.vendorName}: "${i.name}" — ${status}${dur}`;
-    });
-    let msg = `I found ${pi.searchResults.length} incident(s) related to "${keyword}":\n\n${lines.join('\n')}`;
-    if (pi.searchResults.length > 8) {
-      msg += `\n\n...and ${pi.searchResults.length - 8} more.`;
+    const ongoing = pi.searchResults.filter((i) => !i.resolvedAt);
+    const resolved = pi.searchResults.filter((i) => i.resolvedAt);
+
+    if (ongoing.length > 0) {
+      // Lead with real-time ongoing incidents
+      const lines = ongoing.slice(0, 6).map((i) => {
+        const age = (() => { try { return formatDistanceToNow(parseISO(i.startedAt)); } catch { return 'recently'; } })();
+        return `• 🔴 ${i.vendorName}: "${i.name}" — ongoing, started ${age} ago`;
+      });
+      let msg = `There are ${ongoing.length} ongoing incident(s) related to "${keyword}":\n\n${lines.join('\n')}`;
+      if (resolved.length > 0) {
+        msg += `\n\nThere are also ${resolved.length} resolved past incident(s) matching "${keyword}". Ask me about past ${keyword} incidents if you'd like details.`;
+      }
+      return msg;
     }
+
+    // No ongoing — mention that it's all in the past
+    const lines = resolved.slice(0, 6).map((i) => {
+      const dur = i.durationMinutes ? ` (${i.durationMinutes} min)` : '';
+      return `• ${i.vendorName}: "${i.name}" — ✅ Resolved${dur}`;
+    });
+    let msg = `No ongoing incidents related to "${keyword}" right now. ✅\n\nHowever, there were ${resolved.length} past incident(s):`;
+    msg += `\n\n${lines.join('\n')}`;
+    if (resolved.length > 6) msg += `\n\n...and ${resolved.length - 6} more.`;
     return msg;
   }
 
