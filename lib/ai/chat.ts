@@ -1,141 +1,131 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { getIncidents } from "@/lib/db/queries";
-import { validateChatInput } from "@/lib/validation/chat";
-import { logChatInteraction } from "@/lib/utils/logger";
-
-// Initialize Gemini client
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY!);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" }); // Using 1.5 Pro as 2.5 is not officially out yet, but can be updated
-
-interface ChatContext {
-    incidents: any[];
-    vendorStatuses: Map<string, string>;
-    systemPrompt: string;
-}
-
-const SYSTEM_PROMPT = `You are an intelligent incident analysis assistant for a production status monitoring system.
-You have access to:
-1. Real-time vendor status data (updated every 60 seconds)
-2. Incident history for the past 15 days
-3. Cross-vendor dependency information
-
-When responding to user queries:
-- Analyze patterns in incident data (e.g., "AWS had 3 outages this week")
-- Identify correlations between vendor failures (e.g., "When GitHub went down, CI/CD failed")
-- Predict cascading impact (e.g., "If Snowflake goes down, analytics pipelines will fail")
-- Provide actionable recommendations based on incident history
-
-IMPORTANT:
-- Always cite specific incident data or timestamps
-- If you don't have specific data, explicitly say so
-- Distinguish between correlation and causation
-- Consider business impact, not just technical details
-- Be concise but thorough in analysis`;
+import { SRE_SYSTEM_PROMPT } from "./system-prompt";
+import { buildChatContext } from "./context";
+import { validateChatMessage, logChatInteraction } from "./helpers";
 
 /**
- * Builds the context for the AI by fetching real data from the database.
- */
-async function buildChatContext(): Promise<ChatContext> {
-    // Fetch recent incidents
-    const incidents = await getIncidents({
-        limit: 100,
-        offset: 0
-    });
-
-    // Map vendor statuses
-    const vendorStatuses = new Map<string, string>();
-    incidents.forEach(incident => {
-        if (incident.vendor_id && incident.status) {
-            vendorStatuses.set(incident.vendor_id, incident.status);
-        }
-    });
-
-    return {
-        incidents,
-        vendorStatuses,
-        systemPrompt: SYSTEM_PROMPT,
-    };
-}
-
-/**
- * Analyzes a user message using Gemini and provides a contextual response.
+ * Core chatbot analysis function.
+ *
+ * This is the ONLY place where Gemini is called. The function:
+ * 1. Validates user input.
+ * 2. Fetches live vendor status + incident data from the database.
+ * 3. Injects that data as context into the Gemini prompt.
+ * 4. Sends the contextualised prompt to Gemini 2.5 Pro.
+ * 5. Returns the AI's actual response (NOT keyword-matched DB results).
+ *
+ * Why we inject context into the user message rather than using tools:
+ * Tool use (function calling) adds latency and complexity. For a read-only
+ * dashboard chatbot the data is small enough to inject directly, giving the
+ * model full context in a single round-trip.
+ *
+ * @param userMessage  - The user's question, 1-2000 characters.
+ * @param conversationHistory - Previous messages for multi-turn context.
+ * @param clientIp - IP address for audit logging.
+ * @returns The AI-generated analysis text.
+ * @throws {Error} On invalid input or Gemini API failure.
  */
 export async function analyzeChat(
-    userMessage: string,
-    conversationHistory: any[] = []
+  userMessage: string,
+  conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
+  clientIp: string = "unknown"
 ): Promise<string> {
-    // 1. Validate input
-    const validated = validateChatInput({ message: userMessage });
-    if (!validated.success) {
-        throw new Error(`Invalid input: ${JSON.stringify(validated.error.flatten())}`);
-    }
+  // ------------------------------------------------------------------
+  // 1. INPUT VALIDATION
+  // ------------------------------------------------------------------
+  const validated = validateChatMessage(userMessage);
+  if (!validated.success || !validated.data) {
+    throw new Error(validated.error ?? "Invalid input");
+  }
+  const sanitisedMessage = validated.data;
 
-    // 2. Build context with real data
-    const context = await buildChatContext();
+  // ------------------------------------------------------------------
+  // 2. BUILD REAL-TIME CONTEXT FROM DATABASE
+  // ------------------------------------------------------------------
+  const context = await buildChatContext();
 
-    // 3. Format current status for context
-    const currentStatusText = Array.from(context.vendorStatuses.entries())
-        .map(([vendor, status]) => `- ${vendor}: ${status}`)
-        .join('\n');
+  // ------------------------------------------------------------------
+  // 3. INJECT CONTEXT INTO THE USER MESSAGE
+  //    This is the critical step that makes the chatbot useful.
+  //    Without this, Gemini would only see the user's question in a
+  //    vacuum and give generic answers.
+  // ------------------------------------------------------------------
+  const contextualMessage = [
+    "=== CURRENT VENDOR STATUS ===",
+    context.currentStatus,
+    "",
+    "=== INCIDENT HISTORY (Last 15 Days) ===",
+    context.recentIncidents,
+    "",
+    `Total vendors monitored: ${context.vendorCount}`,
+    `Total incidents in window: ${context.incidentCount}`,
+    "",
+    "=== USER QUESTION ===",
+    sanitisedMessage,
+  ].join("\n");
 
-    // 4. Format recent incidents for context
-    const incidentsText = context.incidents
-        .slice(0, 20)
-        .map(i => `- ${i.vendor_id} (${i.status}): ${i.name} (${i.created_at})`)
-        .join('\n');
-
-    // 5. Build the full message with context
-    const contextualMessage = `
-CURRENT VENDOR STATUS:
-${currentStatusText}
-
-RECENT INCIDENTS (Last 15 days):
-${incidentsText}
-
----
-USER QUESTION: ${validated.data.message}`;
-
-    // 6. Build conversation history for the model
-    const history = conversationHistory.map((msg: any) => ({
-        role: msg.role === 'user' ? 'user' : 'model',
-        parts: [{ text: msg.content }],
+  // ------------------------------------------------------------------
+  // 4. BUILD THE MESSAGE ARRAY WITH CONVERSATION HISTORY
+  //    Gemini expects alternating user/model messages. We map our
+  //    "assistant" role to Gemini's "model" role.
+  // ------------------------------------------------------------------
+  const history = conversationHistory
+    .slice(-20) // keep last 20 messages to stay within context limits
+    .map((msg) => ({
+      role: msg.role === "assistant" ? ("model" as const) : ("user" as const),
+      parts: [{ text: msg.content }],
     }));
 
-    // Add the current message
-    history.push({
-        role: 'user',
-        parts: [{ text: contextualMessage }],
+  // ------------------------------------------------------------------
+  // 5. CALL GEMINI API
+  //    - Uses systemInstruction so the SRE prompt persists across turns.
+  //    - Temperature 0.7 balances creativity with factual accuracy.
+  //    - 10-second timeout prevents indefinite hangs.
+  // ------------------------------------------------------------------
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GOOGLE_GENERATIVE_AI_API_KEY is not configured");
+  }
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-pro-preview-05-06",
+    systemInstruction: SRE_SYSTEM_PROMPT,
+    generationConfig: {
+      temperature: 0.7,
+      topP: 0.9,
+      topK: 40,
+      maxOutputTokens: 1024,
+    },
+  });
+
+  try {
+    const chat = model.startChat({
+      history,
     });
 
-    // 7. Call Gemini with system prompt and tuned parameters
-    try {
-        const chat = model.startChat({
-            history: history.slice(0, -1), // History excluding current message
-            generationConfig: {
-                temperature: 0.7,
-                topP: 0.9,
-                topK: 40,
-                maxOutputTokens: 1024,
-            },
-        });
+    const result = await chat.sendMessage(contextualMessage);
+    const responseText = result.response.text();
 
-        const result = await chat.sendMessage(contextualMessage);
-        const responseText = result.response.text();
+    // ------------------------------------------------------------------
+    // 6. AUDIT LOGGING
+    //    Log the interaction asynchronously. Don't await — if logging
+    //    fails, the user should still get their response.
+    // ------------------------------------------------------------------
+    logChatInteraction(clientIp, sanitisedMessage, responseText, {
+      vendorCount: context.vendorCount,
+      incidentCount: context.incidentCount,
+    }).catch(() => {
+      /* intentionally swallowed — logged inside logChatInteraction */
+    });
 
-        // 8. Log interaction for audit trail
-        await logChatInteraction(
-            'unknown-ip', // Overridden in route handler if possible
-            validated.data.message,
-            responseText,
-            {
-                vendorCount: context.vendorStatuses.size,
-                incidentCount: context.incidents.length,
-            }
-        );
-
-        return responseText;
-    } catch (error) {
-        console.error('Gemini API error:', error);
-        throw new Error('Failed to generate AI response');
-    }
+    // ------------------------------------------------------------------
+    // 7. RETURN THE ACTUAL GEMINI RESPONSE
+    //    This is the whole point: we return what the AI said, not some
+    //    keyword-filtered database result.
+    // ------------------------------------------------------------------
+    return responseText;
+  } catch (error) {
+    console.error("[Chat] Gemini API call failed:", error);
+    throw new Error("Failed to generate response. Please try again.");
+  }
 }

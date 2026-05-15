@@ -1,65 +1,136 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkChatRateLimit, extractClientIp } from "@/lib/security/api";
 import { analyzeChat } from "@/lib/ai/chat";
-import { validateChatInput } from "@/lib/validation/chat";
-import { logChatInteraction } from "@/lib/utils/logger";
+import { extractClientIp, checkChatRateLimit } from "@/lib/security/api";
+import { validateChatMessage } from "@/lib/ai/helpers";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 /**
- * Chat endpoint for AI-powered incident analysis.
- * Implements rate limiting, input validation, and audit logging.
+ * POST /api/chat
+ *
+ * Production-grade chat endpoint with:
+ * - Upstash Redis rate limiting (10 req/min per IP)
+ * - DOMPurify input sanitisation
+ * - Real-time vendor context injection via Gemini 2.5 Pro
+ * - Conversation history support for multi-turn analysis
+ * - Audit logging of all interactions
+ *
+ * Request body:
+ * {
+ *   "message": string,                           // required, 1-2000 chars
+ *   "conversationHistory"?: Array<{role, content}> // optional, last N messages
+ * }
+ *
+ * Success response (200):
+ * {
+ *   "success": true,
+ *   "response": "AI analysis...",
+ *   "timestamp": "ISO-8601"
+ * }
+ *
+ * Error responses: 400, 429, 500
  */
-export async function POST(request: NextRequest) {
-    try {
-        // 1. Extract client IP for rate limiting and logging
-        const clientIp = extractClientIp(request);
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const clientIp = extractClientIp(request);
 
-        // 2. Check rate limit (10 req/min)
-        const isAllowed = await checkChatRateLimit(request);
-        if (!isAllowed) {
-            return NextResponse.json(
-                { error: "Rate limit exceeded. Please try again in a minute." },
-                { status: 429, headers: { "Retry-After": "60" } }
-            );
-        }
-
-        // 3. Parse and validate request body
-        let body: any;
-        try {
-            body = await request.json();
-        } catch {
-            return NextResponse.json(
-                { error: "Invalid JSON body" },
-                { status: 400 }
-            );
-        }
-
-        const validated = validateChatInput(body);
-        if (!validated.success) {
-            return NextResponse.json(
-                { error: "Invalid input", details: validated.error.flatten() },
-                { status: 400 }
-            );
-        }
-
-        // 4. Call AI analysis with context
-        const response = await analyzeChat(validated.data.message);
-
-        // 5. Final audit log with actual IP (already partially logged in analyzeChat but this ensures IP is correct)
-        await logChatInteraction(clientIp, validated.data.message, response);
-
-        // 6. Return response
-        return NextResponse.json({
-            success: true,
-            response,
-            timestamp: new Date().toISOString(),
-        });
-    } catch (error: any) {
-        console.error("Chat endpoint error:", error);
-        
-        // Don't expose internal error details in production
-        return NextResponse.json(
-            { error: "An internal error occurred while processing your request." },
-            { status: 500 }
-        );
+  // ------------------------------------------------------------------
+  // 1. RATE LIMITING — fail closed (reject if uncertain)
+  // ------------------------------------------------------------------
+  try {
+    const isAllowed = await checkChatRateLimit(request);
+    if (!isAllowed) {
+      return NextResponse.json(
+        { success: false, error: "Rate limit exceeded. Please try again in a minute." },
+        { status: 429, headers: { "Retry-After": "60" } }
+      );
     }
+  } catch (rateLimitError) {
+    // Fail closed: if we can't verify the rate limit, reject the request.
+    console.error("[Chat] Rate limit check failed:", rateLimitError);
+    return NextResponse.json(
+      { success: false, error: "Service temporarily unavailable. Please try again." },
+      { status: 503 }
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // 2. PARSE REQUEST BODY
+  // ------------------------------------------------------------------
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { success: false, error: "Invalid JSON body" },
+      { status: 400 }
+    );
+  }
+
+  if (typeof body !== "object" || body === null) {
+    return NextResponse.json(
+      { success: false, error: "Request body must be a JSON object" },
+      { status: 400 }
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // 3. VALIDATE MESSAGE INPUT
+  // ------------------------------------------------------------------
+  const { message, conversationHistory } = body as Record<string, unknown>;
+  // Also accept `question` field for backward compatibility with the old /api/bot route
+  const rawMessage = message ?? (body as Record<string, unknown>).question;
+
+  const validated = validateChatMessage(rawMessage);
+  if (!validated.success || !validated.data) {
+    return NextResponse.json(
+      { success: false, error: validated.error ?? "Invalid message" },
+      { status: 400 }
+    );
+  }
+
+  // Validate conversation history if provided
+  let history: Array<{ role: "user" | "assistant"; content: string }> = [];
+  if (Array.isArray(conversationHistory)) {
+    history = conversationHistory
+      .filter(
+        (msg): msg is { role: string; content: string } =>
+          typeof msg === "object" &&
+          msg !== null &&
+          typeof (msg as Record<string, unknown>).role === "string" &&
+          typeof (msg as Record<string, unknown>).content === "string"
+      )
+      .filter((msg) => msg.role === "user" || msg.role === "assistant")
+      .slice(-20) // cap at 20 messages
+      .map((msg) => ({
+        role: msg.role as "user" | "assistant",
+        content: msg.content.slice(0, 2000), // truncate long history messages
+      }));
+  }
+
+  // ------------------------------------------------------------------
+  // 4. CALL THE AI CHATBOT
+  // ------------------------------------------------------------------
+  try {
+    const response = await analyzeChat(validated.data, history, clientIp);
+
+    return NextResponse.json({
+      success: true,
+      response,
+      // Fields for backward compatibility with the old BotResponse shape
+      answer: response,
+      confidence: "high",
+      sources: [],
+      suggestedQueries: [],
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("[Chat] Analysis failed:", error);
+
+    // Never expose internal error details to the client.
+    return NextResponse.json(
+      { success: false, error: "An error occurred while analyzing your question. Please try again." },
+      { status: 500 }
+    );
+  }
 }

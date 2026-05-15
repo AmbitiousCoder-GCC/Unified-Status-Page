@@ -45,10 +45,10 @@ export function useChatBot() {
         .slice(-10)
         .map(({ role, content }) => ({ role, content }));
 
-      const res = await fetch('/api/bot', {
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: question.trim(), conversationHistory: history }),
+        body: JSON.stringify({ message: question.trim(), question: question.trim(), conversationHistory: history }),
         signal: abortRef.current.signal,
       });
 
