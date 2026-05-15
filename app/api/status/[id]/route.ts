@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDbClient } from "@/lib/db/client";
 import { VendorStatus, DayUptime } from "@/types/status";
-import { VENDORS } from "@/lib/vendors";
+import { VENDORS_LIST } from "@/lib/vendors";
 import { aggregateRateLimit, checkRateLimit } from "@/app/api/rate-limit";
 import { z } from "zod";
 
-const VendorIdSchema = z.string().refine(val => VENDORS.some(v => v.id === val), {
+const VendorIdSchema = z.string().refine(val => VENDORS_LIST.some(v => v.id === val), {
   message: "Unknown vendor ID"
 });
 
@@ -33,7 +33,7 @@ export async function GET(
     });
   }
 
-  const vendorConfig = VENDORS.find(v => v.id === vendorId);
+  const vendorConfig = VENDORS_LIST.find(v => v.id === vendorId);
 
   const db = getDbClient();
 

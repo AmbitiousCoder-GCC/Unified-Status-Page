@@ -1,6 +1,6 @@
 import { getDbClient } from '@/lib/db/client';
 import { DEPENDENCIES } from '@/lib/dependencies';
-import { VENDORS } from '@/lib/vendors';
+import { VENDORS_LIST } from '@/lib/vendors';
 
 export interface AlertIntent {
   type: 'create_alert';
@@ -17,7 +17,7 @@ export function parseAlertIntent(question: string): AlertIntent | null {
     return null;
   }
 
-  const vendor = VENDORS.find(v => lower.includes(v.name.toLowerCase()) || lower.includes(v.id.toLowerCase()));
+  const vendor = VENDORS_LIST.find(v => lower.includes(v.name.toLowerCase()) || lower.includes(v.id.toLowerCase()));
   if (!vendor) return null;
 
   const minuteMatch = lower.match(/(\d+)\s*(minute|min)/);

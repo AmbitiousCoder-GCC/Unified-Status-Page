@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { VendorStatus } from "@/types/status";
 import { AlertTriangle, X, ExternalLink, Activity, CheckCircle, Bell, BellOff } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { VENDORS } from "@/lib/vendors";
+import { VENDORS_LIST } from "@/lib/vendors";
 
 interface IncidentModalProps {
   status: VendorStatus | null;
@@ -40,7 +40,7 @@ export const IncidentModal = ({ status, isOpen, onClose }: IncidentModalProps) =
 
   if (!status) return null;
 
-  const vendorConfig = VENDORS.find(v => v.id === status.vendorId);
+  const vendorConfig = VENDORS_LIST.find(v => v.id === status.vendorId);
   const activeIncident = status.activeIncidents[0]; // For simplicity, we show the first active incident
 
   return (

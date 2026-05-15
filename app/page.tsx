@@ -10,7 +10,7 @@ import { IncidentModal } from "@/components/IncidentModal";
 
 import { useStatusStore } from "@/lib/store";
 import { VendorStatus } from "@/types/status";
-import { VENDORS } from "@/lib/vendors";
+import { VENDORS_LIST } from "@/lib/vendors";
 import { AlertCircle, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -41,7 +41,7 @@ export default function Dashboard() {
       status.activeIncidents.forEach(inc => {
         currentIncidentIds.add(inc.id);
         if (!prevIncidentIds.has(inc.id) && prevIncidentIds.size > 0) {
-          const vendorName = VENDORS.find(v => v.id === status.vendorId)?.name || "Unknown";
+          const vendorName = VENDORS_LIST.find(v => v.id === status.vendorId)?.name || "Unknown";
           newToasts.push({ id: inc.id, title: inc.title, vendor: vendorName });
         }
       });
@@ -69,7 +69,7 @@ export default function Dashboard() {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter(s => {
-        const vendor = VENDORS.find(v => v.id === s.vendorId);
+        const vendor = VENDORS_LIST.find(v => v.id === s.vendorId);
         return vendor?.name.toLowerCase().includes(q) || vendor?.description.toLowerCase().includes(q);
       });
     }
@@ -87,8 +87,8 @@ export default function Dashboard() {
     // Sort
     result.sort((a, b) => {
       if (sortBy === "alphabetical") {
-        const nameA = VENDORS.find(v => v.id === a.vendorId)?.name || "";
-        const nameB = VENDORS.find(v => v.id === b.vendorId)?.name || "";
+        const nameA = VENDORS_LIST.find(v => v.id === a.vendorId)?.name || "";
+        const nameB = VENDORS_LIST.find(v => v.id === b.vendorId)?.name || "";
         return nameA.localeCompare(nameB);
       }
       if (sortBy === "uptime") {

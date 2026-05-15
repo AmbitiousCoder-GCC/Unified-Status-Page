@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDbClient } from "@/lib/db/client";
 import { VendorStatus, DayUptime } from "@/types/status";
-import { VENDORS } from "@/lib/vendors";
+import { VENDORS_LIST } from "@/lib/vendors";
 import { aggregateRateLimit, checkRateLimit } from "@/app/api/rate-limit";
 import { z } from "zod";
 
@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
       // DB is empty — fall back to live fetching via per-vendor status endpoints
       const url = new URL(request.url);
       const baseUrl = `${url.protocol}//${url.host}`;
-      const promises = VENDORS.map(vendor =>
+      const promises = VENDORS_LIST.map(vendor =>
         fetch(`${baseUrl}/api/status/${vendor.id}`)
           .then(res => res.json() as Promise<VendorStatus>)
           .catch(() => ({

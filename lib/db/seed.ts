@@ -7,33 +7,23 @@ export async function seedVendors() {
   console.log('Seeding vendors...');
   
   try {
-    for (const vendor of VENDORS) {
+    for (const vendor of Object.values(VENDORS)) {
       await db.query(
         `
-        INSERT INTO vendors (id, name, status_url, api_url, logo_url, accent_color, description, parser)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO vendors (id, name, status_page_url)
+        VALUES ($1, $2, $3)
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
-          status_url = EXCLUDED.status_url,
-          api_url = EXCLUDED.api_url,
-          logo_url = EXCLUDED.logo_url,
-          accent_color = EXCLUDED.accent_color,
-          description = EXCLUDED.description,
-          parser = EXCLUDED.parser
+          status_page_url = EXCLUDED.status_page_url
         `,
         [
           vendor.id,
           vendor.name,
-          vendor.statusUrl,
-          vendor.apiUrl,
-          vendor.logoUrl,
-          vendor.accentColor,
-          vendor.description,
-          (vendor as any).parser || 'statuspage'
+          vendor.status_page_url || `https://status.${vendor.id}.com`
         ]
       );
     }
-    console.log(`Successfully seeded ${VENDORS.length} vendors.`);
+    console.log(`Successfully seeded ${Object.keys(VENDORS).length} vendors.`);
   } catch (error) {
     console.error('Error seeding vendors:', error);
     throw error;

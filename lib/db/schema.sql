@@ -1,73 +1,66 @@
+-- Unified Status Page Database Schema
+-- Optimized for Vercel Postgres (PostgreSQL)
+
+-- 1. Vendors table: Core registry of monitored services
 CREATE TABLE IF NOT EXISTS vendors (
-  id TEXT PRIMARY KEY,
-  name TEXT,
-  status_url TEXT,
-  api_url TEXT,
-  logo_url TEXT,
-  accent_color TEXT,
-  description TEXT,
-  parser TEXT,
-  category TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL UNIQUE,
+    status_page_url TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS status_checks (
-  id SERIAL PRIMARY KEY,
-  vendor_id TEXT REFERENCES vendors(id),
-  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  status TEXT,
-  response_time_ms INTEGER,
-  raw_data JSONB
+-- 2. Vendor Status table: Real-time status snapshots
+CREATE TABLE IF NOT EXISTS vendor_status (
+    vendor_id UUID PRIMARY KEY REFERENCES vendors(id) ON DELETE CASCADE,
+    status TEXT NOT NULL CHECK (status IN ('OPERATIONAL', 'DEGRADED', 'OUTAGE')),
+    description TEXT,
+    last_checked TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 3. Incidents table: Historical log of events
 CREATE TABLE IF NOT EXISTS incidents (
-  id TEXT PRIMARY KEY,
-  vendor_id TEXT REFERENCES vendors(id),
-  title TEXT,
-  severity TEXT,
-  status TEXT,
-  started_at TIMESTAMP,
-  resolved_at TIMESTAMP,
-  duration_minutes INTEGER,
-  affected_components TEXT[],
-  raw_data JSONB,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id TEXT PRIMARY KEY, -- Using vendor-provided incident IDs if available
+    vendor_id UUID NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    impact TEXT,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS uptime_daily (
-  id SERIAL PRIMARY KEY,
-  vendor_id TEXT REFERENCES vendors(id),
-  date DATE,
-  uptime_pct DECIMAL(5,4),
-  total_checks INTEGER,
-  failed_checks INTEGER,
-  UNIQUE(vendor_id, date)
+-- 4. Chat Conversations: Sessions for the AI assistant
+CREATE TABLE IF NOT EXISTS chat_conversations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT, -- Optional, for future auth integration
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS alert_rules (
-  id SERIAL PRIMARY KEY,
-  vendor_id TEXT REFERENCES vendors(id),
-  condition_type TEXT,
-  threshold_minutes INTEGER,
-  webhook_url TEXT,
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- 5. Chat Messages: Individual messages within a conversation
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    content TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS components (
-  id TEXT PRIMARY KEY,
-  vendor_id TEXT REFERENCES vendors(id),
-  name TEXT,
-  status TEXT,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- 6. Audit Logs: Security and interaction tracking
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    action TEXT NOT NULL,
+    user_ip TEXT NOT NULL,
+    user_message TEXT,
+    response TEXT,
+    context_json JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS maintenances (
-  id TEXT PRIMARY KEY,
-  vendor_id TEXT REFERENCES vendors(id),
-  name TEXT,
-  status TEXT,
-  scheduled_start TIMESTAMP,
-  scheduled_end TIMESTAMP,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- Indexes for performance
+CREATE INDEX IF NOT EXISTS idx_incidents_vendor_id ON incidents(vendor_id);
+CREATE INDEX IF NOT EXISTS idx_incidents_created_at ON incidents(created_at);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation_id ON chat_messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);

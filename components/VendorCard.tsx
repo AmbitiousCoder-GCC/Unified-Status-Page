@@ -2,7 +2,7 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 import { VendorStatus } from "@/types/status";
-import { VENDORS } from "@/lib/vendors";
+import { VENDORS_LIST } from "@/lib/vendors";
 import { UptimeRing } from "./UptimeRing";
 import { UptimeSparkline } from "./UptimeSparkline";
 import { AlertTriangle, CheckCircle, Wrench, Clock } from "lucide-react";
@@ -32,7 +32,7 @@ export const VendorCard = ({ status, index, onClick }: VendorCardProps) => {
     return () => clearInterval(interval);
   }, [status.fetchedAt]);
 
-  const vendorConfig = VENDORS.find(v => v.id === status.vendorId);
+  const vendorConfig = VENDORS_LIST.find(v => v.id === status.vendorId);
   if (!vendorConfig) return null;
 
   const isOutage = status.overallStatus.includes("outage");
