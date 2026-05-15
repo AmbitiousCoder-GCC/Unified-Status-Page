@@ -1,220 +1,80 @@
-// lib/vendors/botContext.ts
-import type { IncidentCache, NormalisedIncident } from '@/types/bot';
-import {
-  getAllLiveStatuses,
-  getAllActiveIncidents,
-  getRecentIncidents,
-  getAnalytics,
-  searchIncidents,
-} from '@/lib/vendors/incidentStore';
-import { findVendorByName, KNOWN_VENDOR_NAMES } from '@/lib/vendors/vendorRegistry';
-import { formatDistanceToNow, parseISO } from 'date-fns';
+import { getDbClient } from '@/lib/db/client';
+import { DEPENDENCIES } from '@/lib/dependencies';
+import { VENDORS } from '@/lib/vendors';
 
 export interface BotContext {
   dataBlock: string;
-  sources: string[];
-  dataAsOf: string;
   hasData: boolean;
-  /** Structured data the template fallback can use to give a targeted answer */
-  parsedIntent: ParsedIntent;
+  dataAsOf: string;
+  sources: string[];
 }
 
-interface ParsedIntent {
-  type: 'status_check' | 'active_incidents' | 'history' | 'search' | 'analytics' | 'general';
-  vendorId: string | null;
-  vendorName: string | null;
-  keywords: string[];
-  searchResults: NormalisedIncident[];
-  activeIncidents: NormalisedIncident[];
-  recentIncidents: NormalisedIncident[];
-}
+let cachedContext: BotContext | null = null;
+let lastCacheTime = 0;
+const CACHE_TTL = 30000; // 30 seconds
 
-// ── Keyword extraction ─────────────────────────────────────────────
-// Strips common stop words and returns meaningful terms for searching
-const STOP_WORDS = new Set([
-  'is', 'are', 'was', 'were', 'the', 'a', 'an', 'any', 'this', 'that',
-  'there', 'here', 'how', 'what', 'which', 'who', 'when', 'where', 'why',
-  'do', 'does', 'did', 'has', 'have', 'had', 'be', 'been', 'being',
-  'can', 'could', 'will', 'would', 'shall', 'should', 'may', 'might',
-  'to', 'of', 'in', 'on', 'at', 'for', 'with', 'from', 'by', 'about',
-  'up', 'out', 'if', 'or', 'and', 'but', 'not', 'no', 'so', 'it',
-  'its', 'my', 'me', 'our', 'your', 'i', 'you', 'we', 'they', 'he',
-  'she', 'tell', 'show', 'give', 'get', 'know', 'check', 'please',
-  'right', 'now', 'currently', 'today', 'hi', 'hello', 'hey', 'nexus',
-  'related', 'regarding', 'concerning', 'vendors', 'vendor', 'service',
-  'services', 'status', 'going', 'everything', 'anything', 'something',
-  'okay', 'ok', 'fine', 'good', 'bad', 'all', 'many', 'much', 'some',
-  'just', 'only', 'also', 'more', 'most', 'very', 'really', 'quite',
-  'still', 'already', 'yet', 'ever', 'never', 'always', 'often',
-  'happening', 'happened', 'looking', 'need', 'want', 'like',
-]);
-
-function extractKeywords(question: string): string[] {
-  return question
-    .toLowerCase()
-    .replace(/[?!.,;:'"()]/g, '')
-    .split(/\s+/)
-    .filter((w) => w.length > 1 && !STOP_WORDS.has(w));
-}
-
-// ── Intent classification ──────────────────────────────────────────
-function classifyIntent(q: string): ParsedIntent['type'] {
-  if (/\b(how many|average|mttr|mean time|trend|frequent|reliable|worst|best|analyt)/i.test(q)) return 'analytics';
-  if (/\b(active|current|right now|ongoing|outage|down|issue|problem|broken|experiencing)/i.test(q)) return 'active_incidents';
-  if (/\b(last|recent|history|past|previous|week|month|yesterday|incident)/i.test(q)) return 'history';
-  if (/\b(search|find|related|about|involving|mention|affect)/i.test(q)) return 'search';
-  if (/\b(up|working|operational|ok|okay|fine|running|healthy|alive)/i.test(q)) return 'status_check';
-  return 'general';
-}
-
-// ── Format an incident for display ────────────────────────────────
-function fmtIncident(i: NormalisedIncident, verbose = false): string {
-  const impact = `[${i.impact.toUpperCase()}]`;
-  const age = (() => { try { return formatDistanceToNow(parseISO(i.startedAt)); } catch { return 'unknown time'; } })();
-  const resolved = i.resolvedAt
-    ? `resolved ${(() => { try { return formatDistanceToNow(parseISO(i.resolvedAt)); } catch { return '?'; } })()} ago`
-    : 'ONGOING';
-  const dur = i.durationMinutes ? ` (${i.durationMinutes}min)` : '';
-  let line = `- ${impact} ${i.vendorName}: "${i.name}" — ${resolved}${dur}`;
-  if (verbose && i.latestUpdate) {
-    line += `\n  Latest update: ${i.latestUpdate.slice(0, 400)}`;
+export async function buildBotContext(): Promise<BotContext> {
+  const now = Date.now();
+  if (cachedContext && (now - lastCacheTime < CACHE_TTL)) {
+    return cachedContext;
   }
-  return line;
-}
 
-// ── Main builder ──────────────────────────────────────────────────
-export function buildBotContext(question: string, cache: IncidentCache): BotContext {
-  const q = question.toLowerCase();
+  const db = getDbClient();
+  let dataBlock = "## CURRENT VENDOR STATUS\n\n";
   const sources: string[] = [];
-  const blocks: string[] = [];
-  const now = new Date().toISOString();
+  let hasData = false;
 
-  // ── 1. Parse intent
-  const intentType = classifyIntent(q);
-  const mentionedVendor = findVendorByName(question);
-  const keywords = extractKeywords(question);
+  try {
+    const { rows: statusRows } = await db.query(
+      `SELECT DISTINCT ON (vendor_id) vendor_id, status, timestamp FROM status_checks ORDER BY vendor_id, timestamp DESC`
+    );
+    
+    const { rows: uptimeRows } = await db.query(
+      `SELECT vendor_id, AVG(uptime_pct) as avg_uptime FROM uptime_daily WHERE date >= CURRENT_DATE - INTERVAL '15 days' GROUP BY vendor_id`
+    );
 
-  // ── 2. Always include compact live status
-  const liveStatuses = getAllLiveStatuses(cache);
-  if (liveStatuses.length > 0) {
-    sources.push('live_status');
-    const statusLines = liveStatuses.map((s) => {
-      const emoji = s.status === 'operational' ? '🟢' : s.status === 'degraded' ? '🟡' : s.status === 'outage' ? '🔴' : '⚪';
-      const active = s.activeIncidents.length > 0
-        ? ` — ${s.activeIncidents.length} active incident(s): ${s.activeIncidents.map((i) => i.name).join(', ')}`
-        : '';
-      const age = (() => { try { return formatDistanceToNow(parseISO(s.lastFetchedAt)); } catch { return '<1 min'; } })();
-      return `${emoji} ${s.vendorName}: ${s.status}${active} (as of ${age} ago)`;
-    });
-    blocks.push(`## CURRENT LIVE STATUS\n${statusLines.join('\n')}`);
-  }
+    const { rows: incidentRows } = await db.query(
+      `SELECT vendor_id, COUNT(*) as count FROM incidents WHERE status != 'resolved' GROUP BY vendor_id`
+    );
 
-  // ── 3. Always include active incidents (they're essential context)
-  const allActive = mentionedVendor
-    ? cache[mentionedVendor.id]?.liveStatus.activeIncidents ?? []
-    : getAllActiveIncidents(cache);
-  sources.push('active_incidents');
-  if (allActive.length > 0) {
-    blocks.push(`## ACTIVE INCIDENTS\n${allActive.map((i) => fmtIncident(i, true)).join('\n')}`);
-  } else {
-    blocks.push(`## ACTIVE INCIDENTS\nNo active incidents${mentionedVendor ? ` for ${mentionedVendor.displayName}` : ' across any vendor'}.`);
-  }
+    const uptimeMap = new Map(uptimeRows.map(r => [r.vendor_id, parseFloat(r.avg_uptime)]));
+    const incidentMap = new Map(incidentRows.map(r => [r.vendor_id, parseInt(r.count, 10)]));
 
-  // ── 4. KEYWORD SEARCH
-  //    Default: search ONLY active/ongoing incidents (real-time)
-  //    Historical search only when user explicitly asks for past data
-  const wantsHistory = intentType === 'history' || intentType === 'search';
-  const INTENT_WORDS = new Set([
-    'outage', 'incident', 'incidents', 'down', 'active', 'operational',
-    'working', 'degraded', 'issue', 'issues', 'problem', 'problems',
-    'broken', 'experiencing', 'current', 'ongoing', 'recent', 'last',
-    'history', 'past', 'previous', 'week', 'month', 'yesterday',
-    'analytics', 'average', 'trend', 'worst', 'best', 'reliable',
-    'search', 'find', 'update', 'updates', 'healthy', 'alive',
-  ]);
-  const searchTerms = keywords.filter((kw) => !INTENT_WORDS.has(kw));
-  let searchResults: NormalisedIncident[] = [];
-  if (searchTerms.length > 0) {
-    const seen = new Set<string>();
-    for (const term of searchTerms) {
-      const found = searchIncidents(cache, term);
-      for (const inc of found) {
-        if (!seen.has(inc.id)) {
-          seen.add(inc.id);
-          searchResults.push(inc);
-        }
-      }
+    if (statusRows.length > 0) hasData = true;
+
+    for (const row of statusRows) {
+      const vendorConfig = VENDORS.find(v => v.id === row.vendor_id);
+      const name = vendorConfig?.name || row.vendor_id;
+      const uptime = uptimeMap.get(row.vendor_id)?.toFixed(2) || '100.00';
+      const incCount = incidentMap.get(row.vendor_id) || 0;
+      const deps = DEPENDENCIES[row.vendor_id] || [];
+      const depsStr = deps.length > 0 ? ` (Depends on: ${deps.join(', ')})` : '';
+
+      let indicator = '🟢';
+      if (row.status === 'degraded' || row.status === 'maintenance') indicator = '🟡';
+      if (row.status === 'major_outage' || row.status === 'partial_outage') indicator = '🔴';
+      if (row.status === 'unknown') indicator = '⚪';
+
+      dataBlock += `${indicator} **${name}**: ${row.status.toUpperCase()} | Uptime (15d): ${uptime}% | Active Incidents: ${incCount}${depsStr}\n`;
+      if (vendorConfig) sources.push(vendorConfig.statusUrl);
     }
 
-    if (searchResults.length > 0) {
-      sources.push('keyword_search');
-      // Split into ongoing and resolved
-      const ongoing = searchResults.filter((i) => !i.resolvedAt);
-      const resolved = searchResults.filter((i) => i.resolvedAt);
+    cachedContext = {
+      dataBlock,
+      hasData,
+      dataAsOf: new Date().toISOString(),
+      sources: Array.from(new Set(sources)).slice(0, 5)
+    };
+    lastCacheTime = now;
 
-      if (ongoing.length > 0) {
-        blocks.push(`## ONGOING INCIDENTS matching "${searchTerms.join(', ')}"\n${ongoing.map((i) => fmtIncident(i, true)).join('\n')}`);
-      }
-
-      // Only include resolved/historical if user asked for past data, or if there are no ongoing matches
-      if (wantsHistory || ongoing.length === 0) {
-        const topResolved = resolved.slice(0, 10);
-        if (topResolved.length > 0) {
-          blocks.push(`## RESOLVED INCIDENTS matching "${searchTerms.join(', ')}" (historical)\n${topResolved.map((i) => fmtIncident(i)).join('\n')}`);
-        }
-      }
-
-      // If there were only resolved results and user didn't ask for history, note it
-      if (ongoing.length === 0 && !wantsHistory && resolved.length > 0) {
-        blocks.push(`Note: No ONGOING incidents match "${searchTerms.join(', ')}", but ${resolved.length} resolved (past) incident(s) were found. The user can ask about past incidents if they want details.`);
-      }
-    }
+    return cachedContext;
+  } catch (error) {
+    console.error("Failed to build bot context from DB:", error);
+    return {
+      dataBlock: "Error retrieving data.",
+      hasData: false,
+      dataAsOf: new Date().toISOString(),
+      sources: []
+    };
   }
-
-  // ── 5. Recent history — ONLY when explicitly requested
-  if (wantsHistory) {
-    const vendorId = mentionedVendor?.id ?? null;
-    const recent = getRecentIncidents(cache, vendorId, 20);
-    sources.push('incident_history');
-    if (recent.length > 0) {
-      blocks.push(`## RECENT INCIDENTS${mentionedVendor ? ` for ${mentionedVendor.displayName}` : ''} (last 20)\n${recent.map((i) => fmtIncident(i)).join('\n')}`);
-    } else {
-      blocks.push(`## RECENT INCIDENTS\nNo historical incidents found${mentionedVendor ? ` for ${mentionedVendor.displayName}` : ''}.`);
-    }
-  }
-
-  // ── 6. Analytics
-  if (intentType === 'analytics') {
-    const vendorId = mentionedVendor?.id ?? null;
-    const analytics = getAnalytics(cache, vendorId);
-    sources.push('analytics');
-    blocks.push(`## ANALYTICS${mentionedVendor ? ` — ${mentionedVendor.displayName}` : ' — ALL VENDORS'}
-- Total incidents in data: ${analytics.totalIncidents}
-- Resolved incidents: ${analytics.resolvedIncidents}
-- Average duration: ${analytics.avgDurationMinutes !== null ? `${analytics.avgDurationMinutes} minutes` : 'insufficient data'}
-- MTTR: ${analytics.mttrMinutes !== null ? `${analytics.mttrMinutes} minutes` : 'insufficient data'}
-- Impact breakdown: ${JSON.stringify(analytics.impactBreakdown)}
-- Most recent: ${analytics.mostRecentIncident ? `"${analytics.mostRecentIncident.name}" (${analytics.mostRecentIncident.vendorName})` : 'none'}`);
-  }
-
-  const hasData = liveStatuses.length > 0 || blocks.length > 1;
-  const recentIncidents = intentType === 'history' || mentionedVendor
-    ? getRecentIncidents(cache, mentionedVendor?.id ?? null, 20)
-    : [];
-
-  return {
-    dataBlock: blocks.join('\n\n'),
-    sources: [...new Set(sources)],
-    dataAsOf: now,
-    hasData,
-    parsedIntent: {
-      type: intentType,
-      vendorId: mentionedVendor?.id ?? null,
-      vendorName: mentionedVendor?.displayName ?? null,
-      keywords: searchTerms,
-      searchResults,
-      activeIncidents: allActive,
-      recentIncidents,
-    },
-  };
 }

@@ -8,6 +8,7 @@ import { UptimeSparkline } from "./UptimeSparkline";
 import { AlertTriangle, CheckCircle, Wrench, Clock } from "lucide-react";
 import Image from "next/image";
 import { formatDistanceToNow } from "date-fns";
+import { useState, useEffect } from "react";
 
 interface VendorCardProps {
   status: VendorStatus;
@@ -17,6 +18,20 @@ interface VendorCardProps {
 
 export const VendorCard = ({ status, index, onClick }: VendorCardProps) => {
   const shouldReduceMotion = useReducedMotion();
+  const [lastUpdated, setLastUpdated] = useState<string>("recently");
+  const [isStale, setIsStale] = useState(false);
+
+  useEffect(() => {
+    const updateTime = () => {
+      const fetchedDate = new Date(status.fetchedAt);
+      setLastUpdated(formatDistanceToNow(fetchedDate, { addSuffix: true }));
+      setIsStale((new Date().getTime() - fetchedDate.getTime()) > 15 * 60 * 1000);
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 60000);
+    return () => clearInterval(interval);
+  }, [status.fetchedAt]);
+
   const vendorConfig = VENDORS.find(v => v.id === status.vendorId);
   if (!vendorConfig) return null;
 
@@ -32,6 +47,8 @@ export const VendorCard = ({ status, index, onClick }: VendorCardProps) => {
     if (isOperational) return "var(--accent-success)";
     return "var(--text-muted)";
   };
+
+
 
   const statusColor = getStatusColor();
 
@@ -67,6 +84,12 @@ export const VendorCard = ({ status, index, onClick }: VendorCardProps) => {
         className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity duration-500 pointer-events-none"
         style={{ background: `radial-gradient(circle at 50% 0%, ${vendorConfig.accentColor}, transparent 70%)` }}
       />
+
+      {isStale && (
+        <div className="absolute top-0 left-0 right-0 bg-yellow-500/20 text-yellow-500 text-[9px] font-spacemono text-center py-0.5 border-b border-yellow-500/30 uppercase">
+          ⚠ Stale Data Warning
+        </div>
+      )}
 
       {/* HEADER ROW */}
       <div className="flex items-start justify-between mb-2">
@@ -178,10 +201,14 @@ export const VendorCard = ({ status, index, onClick }: VendorCardProps) => {
           </div>
         )}
         
-        <div className="flex items-center gap-1 text-[9px] text-text-muted font-spacemono">
-          <Clock size={9} />
-          {/* To prevent hydration mismatch, we might just show "Just now" or calculate on client */}
-          <span>Updated</span>
+        <div className="flex flex-col items-end gap-0.5">
+          <div className="flex items-center gap-1 text-[9px] text-text-muted font-spacemono">
+            <Clock size={9} />
+            <span>Updated {lastUpdated}</span>
+          </div>
+          <div className="text-[8px] text-text-muted/60 font-spacemono uppercase">
+            Data Source: Database
+          </div>
         </div>
       </div>
     </motion.div>

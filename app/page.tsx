@@ -7,13 +7,13 @@ import { GlobalStatusBar } from "@/components/GlobalStatusBar";
 import { StatusGrid } from "@/components/StatusGrid";
 import { ControlsBar } from "@/components/ControlsBar";
 import { IncidentModal } from "@/components/IncidentModal";
-import { ParticleCanvas } from "@/components/ParticleCanvas";
-import { ScanlineOverlay } from "@/components/ScanlineOverlay";
+
 import { useStatusStore } from "@/lib/store";
 import { VendorStatus } from "@/types/status";
 import { VENDORS } from "@/lib/vendors";
 import { AlertCircle, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const fetcher = (url: string) => fetch(url).then(res => res.json());
 
@@ -114,11 +114,14 @@ export default function Dashboard() {
 
   return (
     <main className="min-h-screen pb-20">
-      <ParticleCanvas />
-      <ScanlineOverlay />
       
-      <HeroHeader lastFetched={lastFetched} />
-      <GlobalStatusBar statuses={statuses || []} />
+      <ErrorBoundary>
+        <HeroHeader lastFetched={lastFetched} />
+      </ErrorBoundary>
+      
+      <ErrorBoundary>
+        <GlobalStatusBar statuses={statuses || []} />
+      </ErrorBoundary>
       
       <ControlsBar statuses={statuses || []} />
       
@@ -127,17 +130,21 @@ export default function Dashboard() {
           Failed to load status data. Please try again.
         </div>
       ) : (
-        <StatusGrid 
-          statuses={filteredAndSortedStatuses} 
-          onSelectVendor={setSelectedVendorId} 
-        />
+        <ErrorBoundary>
+          <StatusGrid 
+            statuses={filteredAndSortedStatuses} 
+            onSelectVendor={setSelectedVendorId} 
+          />
+        </ErrorBoundary>
       )}
 
-      <IncidentModal 
-        isOpen={!!selectedVendorId} 
-        status={selectedStatus} 
-        onClose={() => setSelectedVendorId(null)} 
-      />
+      <ErrorBoundary>
+        <IncidentModal 
+          isOpen={!!selectedVendorId} 
+          status={selectedStatus} 
+          onClose={() => setSelectedVendorId(null)} 
+        />
+      </ErrorBoundary>
 
       {/* Toast Container */}
       <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">

@@ -40,12 +40,17 @@ export function ChatBot() {
     }
   };
 
-  const SUGGESTED = [
+  const DEFAULT_SUGGESTED = [
     'Is GitHub down right now?',
     'Any active outages?',
     'Snowflake incidents last week',
     'Which vendor had the most incidents?',
   ];
+
+  const lastMessage = messages[messages.length - 1];
+  const suggestedQueries = lastMessage?.role === 'assistant' && lastMessage.suggestedQueries?.length 
+    ? lastMessage.suggestedQueries 
+    : (messages.length === 1 ? DEFAULT_SUGGESTED : []);
 
   return (
     <>
@@ -116,10 +121,10 @@ export function ChatBot() {
             <div ref={bottomRef} />
           </div>
 
-          {/* Suggestions (shown when only the welcome message is present) */}
-          {messages.length === 1 && (
+          {/* Suggestions */}
+          {suggestedQueries.length > 0 && !isLoading && (
             <div className="relative z-10 px-4 pb-2 flex flex-wrap gap-2 shrink-0">
-              {SUGGESTED.map((s) => (
+              {suggestedQueries.map((s) => (
                 <button
                   key={s}
                   onClick={() => { sendMessage(s); }}

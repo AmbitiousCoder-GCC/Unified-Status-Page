@@ -3,6 +3,7 @@ import { Orbitron, Space_Mono, DM_Sans } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ChatBot } from "@/components/ChatBot/ChatBot";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const orbitron = Orbitron({ 
   subsets: ["latin"], 
@@ -47,10 +48,11 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${orbitron.variable} ${spaceMono.variable} ${dmSans.variable} font-dmsans antialiased`}>
         <ThemeProvider attribute="data-theme" defaultTheme="dark" enableSystem={false}>
-          <div className="min-h-screen scanlines relative overflow-x-hidden">
-            <div className="absolute inset-0 bg-grid-pattern opacity-50 z-[-1] pointer-events-none" />
+          <div className="min-h-screen relative overflow-x-hidden bg-gradient-to-br from-background via-background to-accent-primary/10">
             {children}
-            <ChatBot />
+            <ErrorBoundary>
+              <ChatBot />
+            </ErrorBoundary>
           </div>
         </ThemeProvider>
       </body>

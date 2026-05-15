@@ -64,6 +64,8 @@ export function useChatBot() {
         role: 'assistant',
         content: data.answer,
         timestamp: new Date().toISOString(),
+        confidence: data.confidence,
+        suggestedQueries: data.suggestedQueries,
       };
 
       setMessages((prev) => [...prev, assistantMsg]);

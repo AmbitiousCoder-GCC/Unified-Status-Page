@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { VendorStatus } from "@/types/status";
-import { AlertTriangle, X, ExternalLink, Activity, CheckCircle } from "lucide-react";
+import { AlertTriangle, X, ExternalLink, Activity, CheckCircle, Bell, BellOff } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { VENDORS } from "@/lib/vendors";
 
@@ -14,6 +14,8 @@ interface IncidentModalProps {
 }
 
 export const IncidentModal = ({ status, isOpen, onClose }: IncidentModalProps) => {
+  const [isSubscribed, setIsSubscribed] = useState(false);
+
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -21,6 +23,20 @@ export const IncidentModal = ({ status, isOpen, onClose }: IncidentModalProps) =
     if (isOpen) window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
   }, [isOpen, onClose]);
+
+  useEffect(() => {
+    if (status) {
+      setIsSubscribed(localStorage.getItem(`sub_${status.vendorId}`) === 'true');
+    }
+  }, [status]);
+
+  const toggleSubscribe = () => {
+    if (status) {
+      const next = !isSubscribed;
+      localStorage.setItem(`sub_${status.vendorId}`, String(next));
+      setIsSubscribed(next);
+    }
+  };
 
   if (!status) return null;
 
@@ -78,12 +94,21 @@ export const IncidentModal = ({ status, isOpen, onClose }: IncidentModalProps) =
                   </p>
                 </div>
               </div>
-              <button 
-                onClick={onClose}
-                className="text-text-muted hover:text-text-primary transition-colors p-1"
-              >
-                <X size={24} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={toggleSubscribe}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-spacemono transition-colors border ${isSubscribed ? 'bg-accent-primary/20 text-accent-primary border-accent-primary' : 'bg-surface hover:bg-surface/80 text-text-muted border-border-glow hover:text-text-primary'}`}
+                >
+                  {isSubscribed ? <Bell size={14} /> : <BellOff size={14} />}
+                  {isSubscribed ? "SUBSCRIBED" : "SUBSCRIBE"}
+                </button>
+                <button 
+                  onClick={onClose}
+                  className="text-text-muted hover:text-text-primary transition-colors p-1"
+                >
+                  <X size={24} />
+                </button>
+              </div>
             </div>
 
             {/* BODY */}

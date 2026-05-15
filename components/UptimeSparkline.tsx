@@ -11,6 +11,20 @@ export const UptimeSparkline = ({
   data: DayUptime[], 
   color: string 
 }) => {
+  const isCalibrating = !data || data.length === 0;
+
+  // If no data, render a flat line at 100%
+  const chartData = isCalibrating 
+    ? Array.from({ length: 15 }).map((_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (14 - i));
+        return {
+          date: d.toISOString().split('T')[0],
+          uptimePct: 100
+        };
+      })
+    : data;
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 10 }}
@@ -19,7 +33,7 @@ export const UptimeSparkline = ({
       className="h-[60px] w-full mt-4"
     >
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+        <AreaChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id={`color-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor={color} stopOpacity={0.8}/>
@@ -37,8 +51,14 @@ export const UptimeSparkline = ({
               if (active && payload && payload.length) {
                 return (
                   <div className="bg-card border border-border-glow px-2 py-1 text-xs rounded text-text-primary shadow-[0_0_10px_var(--border-glow)] font-spacemono z-50">
-                    <div>{payload[0].payload.date}</div>
-                    <div style={{ color }}>{Number(payload[0].value).toFixed(2)}%</div>
+                    {isCalibrating ? (
+                      <div className="text-yellow-400">Calibrating...</div>
+                    ) : (
+                      <>
+                        <div>{payload[0].payload.date}</div>
+                        <div style={{ color }}>{Number(payload[0].value).toFixed(2)}%</div>
+                      </>
+                    )}
                   </div>
                 );
               }

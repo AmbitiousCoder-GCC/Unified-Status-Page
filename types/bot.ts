@@ -64,6 +64,8 @@ export interface BotMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  confidence?: 'high' | 'medium' | 'low' | 'none';
+  suggestedQueries?: string[];
 }
 
 export interface BotRequest {
@@ -75,5 +77,7 @@ export interface BotResponse {
   answer: string;
   sources: string[];       // which vendors/endpoints were queried
   confidence: 'high' | 'medium' | 'low' | 'none';
-  dataAsOf: string;        // ISO8601 UTC of the data used
+  dataAsOf?: string;        // ISO8601 UTC of the data used
+  suggestedQueries?: string[];
+  detectedIntent?: string;
 }
