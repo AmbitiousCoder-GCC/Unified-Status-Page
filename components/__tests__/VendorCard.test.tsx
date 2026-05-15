@@ -4,7 +4,7 @@ import { VendorCard } from '../VendorCard';
 
 describe('VendorCard', () => {
   const mockStatus: any = {
-    vendorId: 'github',
+    vendorId: '00000000-0000-4000-8000-000000000001',
     overallStatus: 'operational',
     statusDescription: 'All Systems Operational',
     uptimePct15d: 100,

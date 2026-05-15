@@ -1,9 +1,9 @@
 export const DEPENDENCIES: Record<string, string[]> = {
-  github: ["fastly", "aws"],
-  gitlab: ["fastly", "google-cloud"],
-  auth0: ["aws"],
-  databricks: ["azure", "aws"],
-  snowflake: ["aws", "gcp"],
-  cloudflare: [], // root
-  mongodb: ["aws", "gcp"],
+  "00000000-0000-4000-8000-000000000001": ["fastly", "aws"], // github
+  "00000000-0000-4000-8000-000000000007": ["fastly", "google-cloud"], // gitlab
+  "00000000-0000-4000-8000-000000000009": ["aws"], // auth0
+  "00000000-0000-4000-8000-000000000008": ["azure", "aws"], // databricks
+  "00000000-0000-4000-8000-000000000010": ["aws", "gcp"], // snowflake
+  "00000000-0000-4000-8000-000000000006": [], // cloudflare
+  "00000000-0000-4000-8000-000000000002": ["aws", "gcp"], // mongodb
 };
