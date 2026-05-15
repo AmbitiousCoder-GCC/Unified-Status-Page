@@ -53,3 +53,21 @@ CREATE TABLE IF NOT EXISTS alert_rules (
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS components (
+  id TEXT PRIMARY KEY,
+  vendor_id TEXT REFERENCES vendors(id),
+  name TEXT,
+  status TEXT,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS maintenances (
+  id TEXT PRIMARY KEY,
+  vendor_id TEXT REFERENCES vendors(id),
+  name TEXT,
+  status TEXT,
+  scheduled_start TIMESTAMP,
+  scheduled_end TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

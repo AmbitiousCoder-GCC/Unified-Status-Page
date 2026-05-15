@@ -4,6 +4,21 @@ import { GcpParser } from '../gcp';
 describe('GcpParser', () => {
   const parser = new GcpParser('gcp', 'Google Cloud');
 
+  test('validates array input', () => {
+    expect(parser.validateInput([])).toBe(true);
+    expect(parser.validateInput({})).toBe(false);
+    expect(parser.validateInput(null)).toBe(false);
+    expect(parser.validateInput('string')).toBe(false);
+  });
+
+  test('returns operational when no incidents', () => {
+    const result = parser.parse([]);
+    expect(result.overallStatus).toBe('operational');
+    expect(result.statusDescription).toBe('All Systems Operational');
+    expect(result.activeIncidents).toHaveLength(0);
+    expect(result.pastIncidents).toHaveLength(0);
+  });
+
   test('parses active and resolved incidents', () => {
     const now = new Date();
     const mockData = [
@@ -29,5 +44,40 @@ describe('GcpParser', () => {
     expect(result.activeIncidents).toHaveLength(1);
     expect(result.pastIncidents).toHaveLength(1);
     expect(result.activeIncidents[0].title).toBe('Active Incident');
+    expect(result.activeIncidents[0].severity).toBe('major');
+  });
+
+  test('maps medium severity to minor', () => {
+    const now = new Date();
+    const mockData = [{
+      id: '3',
+      external_desc: 'Minor Issue',
+      severity: 'medium',
+      begin: new Date(now.getTime() - 1000).toISOString(),
+      service_name: 'BigQuery'
+    }];
+    const result = parser.parse(mockData);
+    expect(result.activeIncidents[0].severity).toBe('minor');
+  });
+
+  test('returns fallback for invalid input', () => {
+    const result = parser.parse({});
+    expect(result.overallStatus).toBe('unknown');
+    expect(result.statusDescription).toBe('Failed to parse data');
+  });
+
+  test('filters old incidents out of past list', () => {
+    const now = new Date();
+    const oldDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
+    const mockData = [{
+      id: '4',
+      external_desc: 'Old Incident',
+      severity: 'low',
+      begin: oldDate.toISOString(),
+      end: new Date(oldDate.getTime() + 3600000).toISOString(),
+      service_name: 'Cloud Run'
+    }];
+    const result = parser.parse(mockData);
+    expect(result.pastIncidents).toHaveLength(0);
   });
 });

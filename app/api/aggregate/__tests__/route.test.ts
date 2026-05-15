@@ -17,9 +17,18 @@ describe('Aggregate API Route', () => {
   test('returns 200 and handles empty DB fallback', async () => {
     const req = new NextRequest('http://localhost/api/aggregate');
     const response = await GET(req);
-    
+
     expect(response.status).toBe(200);
     const data = await response.json();
     expect(Array.isArray(data)).toBe(true);
+  });
+
+  test('handles rate limiting', async () => {
+    const { checkRateLimit } = await import('@/app/api/rate-limit');
+    vi.mocked(checkRateLimit).mockResolvedValueOnce({ success: false, limit: 30, remaining: 0, reset: Date.now() + 60000 });
+
+    const req = new NextRequest('http://localhost/api/aggregate');
+    const response = await GET(req);
+    expect(response.status).toBe(429);
   });
 });

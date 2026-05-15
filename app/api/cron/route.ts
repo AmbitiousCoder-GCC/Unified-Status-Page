@@ -121,6 +121,27 @@ export async function GET(req: Request) {
           [vendor.id, today]
         );
 
+        // Upsert components
+        for (const component of parsed.components || []) {
+          await db.query(
+            `INSERT INTO components (id, vendor_id, name, status, updated_at)
+             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+             ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, updated_at = CURRENT_TIMESTAMP`,
+            [component.id, vendor.id, component.name, component.status]
+          );
+        }
+
+        // Upsert maintenances
+        for (const maint of parsed.scheduledMaintenances || []) {
+          const maintId = maint.id || `${vendor.id}-maint-${Date.now()}`;
+          await db.query(
+            `INSERT INTO maintenances (id, vendor_id, name, status, scheduled_start, scheduled_end)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status`,
+            [maintId, vendor.id, maint.title, maint.status, maint.startedAt, maint.resolvedAt]
+          );
+        }
+
         // Alert rules check
         const { rows: alerts } = await db.query(
           `SELECT * FROM alert_rules WHERE vendor_id = $1 AND is_active = true`,

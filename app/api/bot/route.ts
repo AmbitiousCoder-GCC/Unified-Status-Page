@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { buildBotContext } from '@/lib/vendors/botContext';
 import { botRateLimit, checkRateLimit } from '@/app/api/rate-limit';
-import { executeBotAction } from '@/lib/bot/intents';
+import { executeBotAction, performRootCauseAnalysis, checkPredictiveWarning } from '@/lib/bot/intents';
 import { generateObject } from 'ai';
 import { google } from '@ai-sdk/google';
 
@@ -23,7 +23,7 @@ const BotResponseSchema = z.object({
   confidence: z.enum(["high", "medium", "low"]),
   sources: z.array(z.string()).max(5),
   suggestedQueries: z.array(z.string().max(100)).max(3),
-  detectedIntent: z.enum(["status_check", "active_incidents", "history", "alert_setup", "general", "unknown"]),
+  detectedIntent: z.enum(["status_check", "active_incidents", "history", "alert_setup", "root_cause", "predictive", "general", "unknown"]),
   requiresAction: z.boolean().default(false),
   actionData: z.object({
     type: z.enum(["create_alert", "none"]).optional(),
@@ -67,11 +67,30 @@ export async function POST(req: NextRequest) {
   try {
     const ctx = await buildBotContext();
 
+    // Enrich context with RCA if multiple vendors are degraded
+    let enrichedContext = ctx.dataBlock;
+    if (ctx.degradedVendors && ctx.degradedVendors.length >= 2) {
+      const rca = await performRootCauseAnalysis(ctx.degradedVendors);
+      if (rca) enrichedContext += `\n\n## ROOT CAUSE ANALYSIS\n${rca}`;
+    }
+
+    // Add predictive warnings for vendors with recent incident spikes
+    if (ctx.vendorIds) {
+      const warnings: string[] = [];
+      for (const vid of ctx.vendorIds.slice(0, 4)) {
+        const w = await checkPredictiveWarning(vid);
+        if (w) warnings.push(w);
+      }
+      if (warnings.length > 0) {
+        enrichedContext += `\n\n## PREDICTIVE WARNINGS\n${warnings.join('\n')}`;
+      }
+    }
+
     const messages = [
       ...conversationHistory.map((m) => ({ role: m.role, content: m.content })),
       {
         role: 'user' as const,
-        content: `Data Context:\n${ctx.dataBlock}\n\nUser question: ${question}`,
+        content: `Data Context:\n${enrichedContext}\n\nUser question: ${question}`,
       },
     ];
 

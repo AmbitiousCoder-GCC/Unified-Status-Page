@@ -7,6 +7,8 @@ export interface BotContext {
   hasData: boolean;
   dataAsOf: string;
   sources: string[];
+  degradedVendors: string[];
+  vendorIds: string[];
 }
 
 let cachedContext: BotContext | null = null;
@@ -42,7 +44,11 @@ export async function buildBotContext(): Promise<BotContext> {
 
     if (statusRows.length > 0) hasData = true;
 
+    const degradedVendors: string[] = [];
+    const vendorIds: string[] = [];
+
     for (const row of statusRows) {
+      vendorIds.push(row.vendor_id);
       const vendorConfig = VENDORS.find(v => v.id === row.vendor_id);
       const name = vendorConfig?.name || row.vendor_id;
       const uptime = uptimeMap.get(row.vendor_id)?.toFixed(2) || '100.00';
@@ -57,13 +63,19 @@ export async function buildBotContext(): Promise<BotContext> {
 
       dataBlock += `${indicator} **${name}**: ${row.status.toUpperCase()} | Uptime (15d): ${uptime}% | Active Incidents: ${incCount}${depsStr}\n`;
       if (vendorConfig) sources.push(vendorConfig.statusUrl);
+
+      if (row.status === 'degraded' || row.status === 'partial_outage' || row.status === 'major_outage') {
+        degradedVendors.push(row.vendor_id);
+      }
     }
 
     cachedContext = {
       dataBlock,
       hasData,
       dataAsOf: new Date().toISOString(),
-      sources: Array.from(new Set(sources)).slice(0, 5)
+      sources: Array.from(new Set(sources)).slice(0, 5),
+      degradedVendors,
+      vendorIds
     };
     lastCacheTime = now;
 
@@ -74,7 +86,9 @@ export async function buildBotContext(): Promise<BotContext> {
       dataBlock: "Error retrieving data.",
       hasData: false,
       dataAsOf: new Date().toISOString(),
-      sources: []
+      sources: [],
+      degradedVendors: [],
+      vendorIds: []
     };
   }
 }
