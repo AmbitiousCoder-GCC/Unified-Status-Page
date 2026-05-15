@@ -72,22 +72,24 @@ ORDER BY v.name ASC
 `;
 
 export async function GET(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
-  const { success, reset } = await checkRateLimit(aggregateRateLimit, ip);
-
-  if (!success) {
-    return NextResponse.json({ error: "Too many requests" }, {
-      status: 429,
-      headers: { "Retry-After": Math.ceil((reset - Date.now()) / 1000).toString() }
-    });
+  // 1. Rate Limiting with Soft Failure
+  try {
+    const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
+    const { success } = await checkRateLimit(aggregateRateLimit, ip);
+    if (!success) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
+  } catch (rlError) {
+    console.warn("[RateLimit] Upstash connection failed, bypassing rate limit for availability.", rlError);
   }
 
   const db = getDbClient();
 
   try {
+    // 2. Database Fetch
     let { rows } = await db.query(AGGREGATE_QUERY);
 
-    // --- LAZY REFRESH LOGIC ---
+    // 3. Lazy Sync Logic
     try {
       const latestFetchedAt = rows.length > 0 
         ? Math.max(...rows.map(r => r.fetched_at ? new Date(r.fetched_at).getTime() : 0))
@@ -96,61 +98,31 @@ export async function GET(request: NextRequest) {
       const isStale = (Date.now() - latestFetchedAt) > 5 * 60 * 1000;
       
       if (isStale || rows.length === 0) {
-         console.log(`[Lazy Refresh] Data is stale or missing. Triggering sync...`);
-         
          if (rows.length === 0) {
-           // If no data exists, try to refresh but with a safety timeout
+           // Synchronous refresh with timeout for empty DB
            await Promise.race([
              refreshVendorData(),
-             new Promise((_, reject) => setTimeout(() => reject(new Error("Refresh timeout")), 8000))
-           ]).catch(e => console.error("[Lazy Refresh] Initial sync failed or timed out:", e));
+             new Promise((_, reject) => setTimeout(() => reject(new Error("Refresh Timeout")), 7000))
+           ]).catch(e => console.error("[SyncRefresh] Failed:", e));
            
            const fresh = await db.query(AGGREGATE_QUERY);
            rows = fresh.rows;
          } else {
-           refreshVendorData().catch(e => console.error("[Lazy Refresh] Background sync failed:", e));
+           // Background refresh for stale DB
+           refreshVendorData().catch(e => console.error("[BgRefresh] Failed:", e));
          }
       }
     } catch (refreshErr) {
-      console.error("[Lazy Refresh] Critical error:", refreshErr);
+      console.error("[LazySync] Error during refresh logic:", refreshErr);
     }
-    // ---------------------------
 
+    // 4. Return Placeholder if still empty (Prevents frontend "Failed to load" error)
     if (rows.length === 0) {
-      // Fallback logic remains same
-      const url = new URL(request.url);
-      const baseUrl = `${url.protocol}//${url.host}`;
-      const promises = VENDORS_LIST.map(vendor =>
-        fetch(`${baseUrl}/api/status/${vendor.id}`)
-          .then(res => res.json() as Promise<VendorStatus>)
-          .catch(() => ({
-            vendorId: vendor.id,
-            fetchedAt: new Date().toISOString(),
-            overallStatus: "unknown" as const,
-            statusDescription: "Failed to fetch status",
-            uptimePct15d: 100,
-            uptimeHistory: [],
-            activeIncidents: [],
-            pastIncidents: [],
-            scheduledMaintenances: [],
-            components: []
-          } satisfies VendorStatus))
-      );
-      const statuses = await Promise.all(promises);
-      return NextResponse.json(statuses);
+      return NextResponse.json(VENDORS_LIST.map(v => generatePlaceholder(v.id)));
     }
 
-    function mapStatus(dbStatus: string | null): VendorStatus['overallStatus'] {
-      if (!dbStatus) return 'unknown';
-      const lower = dbStatus.toLowerCase();
-      if (lower === 'operational') return 'operational';
-      if (lower === 'degraded') return 'degraded';
-      if (lower === 'outage') return 'major_outage';
-      return 'unknown';
-    }
-
+    // 5. Normal Mapping
     const statuses: VendorStatus[] = rows.map(row => {
-      const overallStatus = mapStatus(row.latest_status);
       const totalChecks = Number(row.total_checks);
       const failedChecks = Number(row.failed_checks);
       const uptimePct15d = totalChecks > 0 
@@ -160,10 +132,8 @@ export async function GET(request: NextRequest) {
       return {
         vendorId: row.vendor_id,
         fetchedAt: row.fetched_at ? new Date(row.fetched_at).toISOString() : new Date().toISOString(),
-        overallStatus,
-        statusDescription: row.description || (overallStatus === 'operational'
-          ? 'All Systems Operational'
-          : `Current status: ${overallStatus}`),
+        overallStatus: mapStatus(row.latest_status),
+        statusDescription: row.description || "System status reported by vendor",
         uptimePct15d,
         uptimeHistory: (row.uptime_history as DayUptime[]).map(d => ({
             ...d,
@@ -177,20 +147,44 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json(statuses);
+
   } catch (error: unknown) {
-    console.error("Aggregate error:", error);
-    return NextResponse.json({ error: "Failed to aggregate statuses" }, { status: 500 });
+    console.error("[Aggregate] Fatal error:", error);
+    // 6. ULTIMATE FALLBACK: Return cached/static placeholders so UI doesn't crash
+    return NextResponse.json(VENDORS_LIST.map(v => generatePlaceholder(v.id)));
   }
 }
 
+function mapStatus(dbStatus: string | null): VendorStatus['overallStatus'] {
+  if (!dbStatus) return 'unknown';
+  const lower = dbStatus.toLowerCase();
+  if (lower === 'operational') return 'operational';
+  if (lower === 'degraded') return 'degraded';
+  if (lower === 'outage') return 'major_outage';
+  return 'unknown';
+}
+
+function generatePlaceholder(vendorId: string): VendorStatus {
+  return {
+    vendorId,
+    fetchedAt: new Date().toISOString(),
+    overallStatus: "unknown",
+    statusDescription: "Data currently calibrating or vendor unreachable.",
+    uptimePct15d: 100,
+    uptimeHistory: [],
+    activeIncidents: [],
+    pastIncidents: [],
+    scheduledMaintenances: [],
+    components: []
+  };
+}
+
 function mapJsonbIncident(row: Record<string, unknown>): import('@/types/status').Incident {
-  const severity = String(row.severity || 'minor') as 'critical' | 'major' | 'minor' | 'maintenance';
-  const status = String(row.status || 'investigating') as 'investigating' | 'identified' | 'monitoring' | 'resolved';
   return {
     id: String(row.id || ''),
     title: String(row.title || ''),
-    severity,
-    status,
+    severity: String(row.severity || 'minor') as any,
+    status: String(row.status || 'investigating') as any,
     startedAt: row.startedAt ? new Date(String(row.startedAt)).toISOString() : new Date().toISOString(),
     resolvedAt: row.resolvedAt ? new Date(String(row.resolvedAt)).toISOString() : undefined,
     affectedComponents: [],
