@@ -88,28 +88,31 @@ export async function GET(request: NextRequest) {
     let { rows } = await db.query(AGGREGATE_QUERY);
 
     // --- LAZY REFRESH LOGIC ---
-    // Since Vercel Hobby limits Cron to once a day, we check if data is stale (> 5 mins)
-    // and trigger a background refresh if needed.
-    const latestFetchedAt = rows.length > 0 
-      ? Math.max(...rows.map(r => r.fetched_at ? new Date(r.fetched_at).getTime() : 0))
-      : 0;
-    
-    const isStale = (Date.now() - latestFetchedAt) > 5 * 60 * 1000;
-    
-    if (isStale || rows.length === 0) {
-       console.log(`[Lazy Refresh] Data is stale (${Math.round((Date.now() - latestFetchedAt)/1000)}s old). Triggering sync...`);
-       
-       if (rows.length === 0) {
-         // If no data exists, we MUST wait for the first sync to provide a working UI
-         await refreshVendorData();
-         const fresh = await db.query(AGGREGATE_QUERY);
-         rows = fresh.rows;
-       } else {
-         // If we have some data, return it immediately but refresh in background
-         // Note: In serverless environments, background tasks may be throttled 
-         // after response is sent, so we don't await this.
-         refreshVendorData().catch(e => console.error("[Lazy Refresh] Background sync failed:", e));
-       }
+    try {
+      const latestFetchedAt = rows.length > 0 
+        ? Math.max(...rows.map(r => r.fetched_at ? new Date(r.fetched_at).getTime() : 0))
+        : 0;
+      
+      const isStale = (Date.now() - latestFetchedAt) > 5 * 60 * 1000;
+      
+      if (isStale || rows.length === 0) {
+         console.log(`[Lazy Refresh] Data is stale or missing. Triggering sync...`);
+         
+         if (rows.length === 0) {
+           // If no data exists, try to refresh but with a safety timeout
+           await Promise.race([
+             refreshVendorData(),
+             new Promise((_, reject) => setTimeout(() => reject(new Error("Refresh timeout")), 8000))
+           ]).catch(e => console.error("[Lazy Refresh] Initial sync failed or timed out:", e));
+           
+           const fresh = await db.query(AGGREGATE_QUERY);
+           rows = fresh.rows;
+         } else {
+           refreshVendorData().catch(e => console.error("[Lazy Refresh] Background sync failed:", e));
+         }
+      }
+    } catch (refreshErr) {
+      console.error("[Lazy Refresh] Critical error:", refreshErr);
     }
     // ---------------------------
 

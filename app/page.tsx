@@ -15,7 +15,10 @@ import { AlertCircle, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
-const fetcher = (url: string) => fetch(`${url}?t=${Date.now()}`).then(res => res.json());
+const fetcher = (url: string) => fetch(`${url}?t=${Date.now()}`).then(res => {
+  if (!res.ok) throw new Error('Failed to fetch data');
+  return res.json();
+});
 
 export default function Dashboard() {
   const { data: statuses, error } = useSWR<VendorStatus[]>('/api/aggregate', fetcher, {
