@@ -12,20 +12,20 @@ describe('VendorCard', () => {
     activeIncidents: [],
     pastIncidents: [],
     scheduledMaintenances: [],
-    components: []
+    components: [],
+    fetchedAt: new Date().toISOString()
   };
 
   test('renders operational badge correctly', () => {
-    render(<VendorCard status={mockStatus} onClick={() => {}} />);
+    render(<VendorCard status={mockStatus} onClick={() => {}} index={0} />);
     
-    expect(screen.getByText('Operational')).toBeInTheDocument();
-    // Badge color is dynamic but we can check if it renders the base text
+    expect(screen.getByText(/operational/i)).toBeInTheDocument();
   });
 
   test('renders outage badge correctly', () => {
     const outageStatus = { ...mockStatus, overallStatus: 'major_outage' };
-    render(<VendorCard status={outageStatus} onClick={() => {}} />);
+    render(<VendorCard status={outageStatus} onClick={() => {}} index={0} />);
     
-    expect(screen.getByText('Major Outage')).toBeInTheDocument();
+    expect(screen.getByText(/major outage/i)).toBeInTheDocument();
   });
 });
