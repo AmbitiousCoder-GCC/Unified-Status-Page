@@ -4,7 +4,8 @@ import { VendorStatus, DayUptime } from "@/types/status";
 import { VENDORS_LIST } from "@/lib/vendors";
 import { aggregateRateLimit, checkRateLimit } from "@/app/api/rate-limit";
 
-export const revalidate = 60;
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 /**
  * Single CTE query that fetches all vendor data in 1 round-trip.
@@ -146,9 +147,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json(statuses, {
-      headers: { "Cache-Control": "s-maxage=60, stale-while-revalidate=300" },
-    });
+    return NextResponse.json(statuses);
   } catch (error: unknown) {
     console.error("Aggregate error:", error);
     return NextResponse.json({ error: "Failed to aggregate statuses" }, { status: 500 });

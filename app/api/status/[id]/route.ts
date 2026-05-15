@@ -9,7 +9,8 @@ const VendorIdSchema = z.string().refine(val => VENDORS_LIST.some(v => v.id === 
   message: "Unknown vendor ID"
 });
 
-export const revalidate = 60;
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(
   request: NextRequest,
@@ -104,9 +105,7 @@ export async function GET(
       components: []
     };
 
-    return NextResponse.json(statusData, {
-      headers: { "Cache-Control": "max-age=30" },
-    });
+    return NextResponse.json(statusData);
 
   } catch (error: unknown) {
     console.error(`Error fetching status for ${vendorId}:`, error);
