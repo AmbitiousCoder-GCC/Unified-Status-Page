@@ -6,6 +6,8 @@ import { VendorStatus, Incident } from "@/types";
  */
 export const MongoDBAdapter = {
     name: "MongoDB",
+    description: "Document database",
+    accentColor: "#00ed64",
     id: "00000000-0000-4000-8000-000000000002",
 
     async fetchStatus(): Promise<VendorStatus> {

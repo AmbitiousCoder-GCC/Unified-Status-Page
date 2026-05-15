@@ -58,9 +58,32 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 7. Status Checks: Granular log for uptime calculation
+CREATE TABLE IF NOT EXISTS status_checks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    vendor_id UUID NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    latency_ms INTEGER,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 8. Uptime Daily: Aggregated data for sparklines
+CREATE TABLE IF NOT EXISTS uptime_daily (
+    vendor_id UUID NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    total_checks INTEGER DEFAULT 0,
+    failed_checks INTEGER DEFAULT 0,
+    uptime_pct NUMERIC(5,2) DEFAULT 100.00,
+    PRIMARY KEY (vendor_id, date)
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_incidents_vendor_id ON incidents(vendor_id);
 CREATE INDEX IF NOT EXISTS idx_incidents_created_at ON incidents(created_at);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation_id ON chat_messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_status_checks_vendor_id ON status_checks(vendor_id);
+CREATE INDEX IF NOT EXISTS idx_status_checks_timestamp ON status_checks(timestamp);
+CREATE INDEX IF NOT EXISTS idx_uptime_daily_vendor_id ON uptime_daily(vendor_id);
+CREATE INDEX IF NOT EXISTS idx_uptime_daily_date ON uptime_daily(date);

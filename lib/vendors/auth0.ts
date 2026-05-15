@@ -6,6 +6,8 @@ import { VendorStatus, Incident } from "@/types";
  */
 export const Auth0Adapter = {
     name: "Auth0",
+    description: "Identity & auth provider",
+    accentColor: "#eb5424",
     id: "00000000-0000-4000-8000-000000000009",
 
     async fetchStatus(): Promise<VendorStatus> {

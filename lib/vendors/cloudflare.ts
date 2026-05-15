@@ -6,6 +6,8 @@ import { VendorStatus, Incident } from "@/types";
  */
 export const CloudflareAdapter = {
     name: "Cloudflare",
+    description: "CDN & security services",
+    accentColor: "#f38020",
     id: "00000000-0000-4000-8000-000000000006",
 
     async fetchStatus(): Promise<VendorStatus> {

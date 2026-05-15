@@ -73,6 +73,24 @@ export async function updateVendorStatus(
                 updated_at = EXCLUDED.updated_at
         `;
 
+        // Log granular status check
+        await sql`
+            INSERT INTO status_checks (vendor_id, status, timestamp)
+            VALUES (${vendorId}, ${status}, NOW())
+        `;
+
+        // Update daily uptime aggregate
+        const isFailed = status !== 'OPERATIONAL' ? 1 : 0;
+        const initialUptime = isFailed ? 0 : 100;
+        await sql`
+            INSERT INTO uptime_daily (vendor_id, date, total_checks, failed_checks, uptime_pct)
+            VALUES (${vendorId}, CURRENT_DATE, 1, ${isFailed}, ${initialUptime})
+            ON CONFLICT (vendor_id, date) DO UPDATE SET
+                total_checks = uptime_daily.total_checks + 1,
+                failed_checks = uptime_daily.failed_checks + ${isFailed},
+                uptime_pct = ROUND((1 - (CAST(uptime_daily.failed_checks + ${isFailed} AS NUMERIC) / (uptime_daily.total_checks + 1))) * 100, 2)
+        `;
+
         // Upsert incidents
         for (const incident of incidents) {
             await sql`

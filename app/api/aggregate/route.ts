@@ -3,51 +3,31 @@ import { getDbClient } from "@/lib/db/client";
 import { VendorStatus, DayUptime } from "@/types/status";
 import { VENDORS_LIST } from "@/lib/vendors";
 import { aggregateRateLimit, checkRateLimit } from "@/app/api/rate-limit";
-import { z } from "zod";
-
-const VendorStatusSchema = z.array(z.object({
-  vendorId: z.string(),
-  fetchedAt: z.string(),
-  overallStatus: z.enum(["operational", "degraded", "partial_outage", "major_outage", "maintenance", "unknown"]),
-  statusDescription: z.string(),
-  uptimePct15d: z.number(),
-  uptimeHistory: z.array(z.object({
-    date: z.string(),
-    uptimePct: z.number()
-  })),
-  activeIncidents: z.array(z.any()),
-  pastIncidents: z.array(z.any()),
-  scheduledMaintenances: z.array(z.any()),
-  components: z.array(z.any())
-}));
 
 export const revalidate = 60;
 
-// Single CTE query — 1 round-trip instead of 4N
+/**
+ * Single CTE query that fetches all vendor data in 1 round-trip.
+ */
 const AGGREGATE_QUERY = `
-WITH latest_status AS (
-  SELECT DISTINCT ON (vendor_id) vendor_id, status, timestamp
-  FROM status_checks
-  ORDER BY vendor_id, timestamp DESC
-),
-active_incidents AS (
+WITH active_incidents AS (
   SELECT vendor_id, jsonb_agg(jsonb_build_object(
-    'id', id, 'title', title, 'severity', severity, 'status', status,
-    'startedAt', started_at, 'resolvedAt', resolved_at,
-    'affectedComponents', affected_components, 'updates', raw_data
-  ) ORDER BY started_at DESC) as incidents
+    'id', id, 'title', name, 'severity', COALESCE(impact, 'minor'), 'status', status,
+    'startedAt', created_at, 'resolvedAt', null,
+    'affectedComponents', '[]'::jsonb, 'updates', '[]'::jsonb
+  ) ORDER BY created_at DESC) as incidents
   FROM incidents
   WHERE status != 'resolved'
   GROUP BY vendor_id
 ),
 past_incidents AS (
   SELECT vendor_id, jsonb_agg(jsonb_build_object(
-    'id', id, 'title', title, 'severity', severity, 'status', status,
-    'startedAt', started_at, 'resolvedAt', resolved_at,
-    'affectedComponents', affected_components, 'durationMinutes', duration_minutes
-  ) ORDER BY resolved_at DESC) as incidents
+    'id', id, 'title', name, 'severity', COALESCE(impact, 'minor'), 'status', status,
+    'startedAt', created_at, 'resolvedAt', updated_at,
+    'affectedComponents', '[]'::jsonb, 'updates', '[]'::jsonb
+  ) ORDER BY updated_at DESC) as incidents
   FROM (
-    SELECT *, row_number() OVER (PARTITION BY vendor_id ORDER BY resolved_at DESC) as rn
+    SELECT *, row_number() OVER (PARTITION BY vendor_id ORDER BY updated_at DESC) as rn
     FROM incidents WHERE status = 'resolved'
   ) t
   WHERE rn <= 5
@@ -69,43 +49,25 @@ uptime_agg AS (
   FROM uptime_daily
   WHERE date >= CURRENT_DATE - INTERVAL '15 days'
   GROUP BY vendor_id
-),
-vendor_components AS (
-  SELECT vendor_id, jsonb_agg(jsonb_build_object('id', id, 'name', name, 'status', status)) as components
-  FROM components
-  GROUP BY vendor_id
-),
-vendor_maintenances AS (
-  SELECT vendor_id, jsonb_agg(jsonb_build_object(
-    'id', id, 'name', name, 'status', status,
-    'scheduledStart', scheduled_start, 'scheduledEnd', scheduled_end
-  )) as maintenances
-  FROM maintenances
-  WHERE scheduled_end >= CURRENT_DATE
-  GROUP BY vendor_id
 )
 SELECT
   v.id as vendor_id,
   v.name,
-  v.accent_color,
-  v.description,
-  ls.status as latest_status,
-  ls.timestamp as fetched_at,
+  vs.status as latest_status,
+  vs.description,
+  vs.last_checked as fetched_at,
   COALESCE(ai.incidents, '[]'::jsonb) as active_incidents,
   COALESCE(pi.incidents, '[]'::jsonb) as past_incidents,
   COALESCE(uh.history, '[]'::jsonb) as uptime_history,
   COALESCE(ua.total_checks, 0) as total_checks,
-  COALESCE(ua.failed_checks, 0) as failed_checks,
-  COALESCE(vc.components, '[]'::jsonb) as components,
-  COALESCE(vm.maintenances, '[]'::jsonb) as maintenances
+  COALESCE(ua.failed_checks, 0) as failed_checks
 FROM vendors v
-LEFT JOIN latest_status ls ON ls.vendor_id = v.id
+LEFT JOIN vendor_status vs ON vs.vendor_id = v.id
 LEFT JOIN active_incidents ai ON ai.vendor_id = v.id
 LEFT JOIN past_incidents pi ON pi.vendor_id = v.id
 LEFT JOIN uptime_history uh ON uh.vendor_id = v.id
 LEFT JOIN uptime_agg ua ON ua.vendor_id = v.id
-LEFT JOIN vendor_components vc ON vc.vendor_id = v.id
-LEFT JOIN vendor_maintenances vm ON vm.vendor_id = v.id
+ORDER BY v.name ASC
 `;
 
 export async function GET(request: NextRequest) {
@@ -125,7 +87,7 @@ export async function GET(request: NextRequest) {
     const { rows } = await db.query(AGGREGATE_QUERY);
 
     if (rows.length === 0) {
-      // DB is empty — fall back to live fetching via per-vendor status endpoints
+      // Fallback logic remains same
       const url = new URL(request.url);
       const baseUrl = `${url.protocol}//${url.host}`;
       const promises = VENDORS_LIST.map(vendor =>
@@ -145,66 +107,50 @@ export async function GET(request: NextRequest) {
           } satisfies VendorStatus))
       );
       const statuses = await Promise.all(promises);
-      return NextResponse.json(statuses, {
-        headers: { "Cache-Control": "s-maxage=60, stale-while-revalidate=300" },
-      });
+      return NextResponse.json(statuses);
+    }
+
+    function mapStatus(dbStatus: string | null): VendorStatus['overallStatus'] {
+      if (!dbStatus) return 'unknown';
+      const lower = dbStatus.toLowerCase();
+      if (lower === 'operational') return 'operational';
+      if (lower === 'degraded') return 'degraded';
+      if (lower === 'outage') return 'major_outage';
+      return 'unknown';
     }
 
     const statuses: VendorStatus[] = rows.map(row => {
+      const overallStatus = mapStatus(row.latest_status);
       const totalChecks = Number(row.total_checks);
       const failedChecks = Number(row.failed_checks);
-      const uptimePct15d = totalChecks > 0
-        ? Number((((totalChecks - failedChecks) / totalChecks) * 100).toFixed(4))
+      const uptimePct15d = totalChecks > 0 
+        ? Number((((totalChecks - failedChecks) / totalChecks) * 100).toFixed(2)) 
         : 100;
-
-      const uptimeHistory: DayUptime[] = (row.uptime_history as Array<{ date: string; uptimePct: number }>).map(h => ({
-        date: typeof h.date === 'string' ? h.date.split('T')[0] : String(h.date),
-        uptimePct: Number(h.uptimePct)
-      }));
-
-      const overallStatus = (row.latest_status || 'unknown') as VendorStatus['overallStatus'];
 
       return {
         vendorId: row.vendor_id,
         fetchedAt: row.fetched_at ? new Date(row.fetched_at).toISOString() : new Date().toISOString(),
         overallStatus,
-        statusDescription: overallStatus === 'operational'
+        statusDescription: row.description || (overallStatus === 'operational'
           ? 'All Systems Operational'
-          : `Current status: ${overallStatus}`,
+          : `Current status: ${overallStatus}`),
         uptimePct15d,
-        uptimeHistory,
+        uptimeHistory: (row.uptime_history as DayUptime[]).map(d => ({
+            ...d,
+            uptimePct: Number(d.uptimePct)
+        })),
         activeIncidents: (row.active_incidents as Array<Record<string, unknown>>).map(mapJsonbIncident),
         pastIncidents: (row.past_incidents as Array<Record<string, unknown>>).map(mapJsonbIncident),
-        scheduledMaintenances: (row.maintenances as Array<Record<string, unknown>>).map(m => ({
-          id: String(m.id || ''),
-          title: String(m.name || ''),
-          severity: 'maintenance' as const,
-          status: (String(m.status || 'scheduled')) as 'investigating' | 'identified' | 'monitoring' | 'resolved',
-          startedAt: m.scheduledStart ? new Date(String(m.scheduledStart)).toISOString() : new Date().toISOString(),
-          resolvedAt: m.scheduledEnd ? new Date(String(m.scheduledEnd)).toISOString() : undefined,
-          affectedComponents: [] as string[],
-          updates: [] as import('@/types/status').IncidentUpdate[],
-          url: ''
-        })),
-        components: (row.components as Array<Record<string, unknown>>).map(c => ({
-          id: String(c.id),
-          name: String(c.name),
-          status: (c.status || 'operational') as VendorStatus['overallStatus'],
-          uptimePct: 100
-        }))
+        scheduledMaintenances: [],
+        components: []
       };
     });
 
-    const validatedStatuses = VendorStatusSchema.parse(statuses);
-
-    return NextResponse.json(validatedStatuses, {
-      headers: {
-        "Cache-Control": "s-maxage=60, stale-while-revalidate=300",
-      },
+    return NextResponse.json(statuses, {
+      headers: { "Cache-Control": "s-maxage=60, stale-while-revalidate=300" },
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("Aggregate error:", message);
+    console.error("Aggregate error:", error);
     return NextResponse.json({ error: "Failed to aggregate statuses" }, { status: 500 });
   }
 }
@@ -219,8 +165,8 @@ function mapJsonbIncident(row: Record<string, unknown>): import('@/types/status'
     status,
     startedAt: row.startedAt ? new Date(String(row.startedAt)).toISOString() : new Date().toISOString(),
     resolvedAt: row.resolvedAt ? new Date(String(row.resolvedAt)).toISOString() : undefined,
-    affectedComponents: Array.isArray(row.affectedComponents) ? row.affectedComponents.map(String) : [],
-    updates: Array.isArray(row.updates) ? row.updates as import('@/types/status').IncidentUpdate[] : [],
+    affectedComponents: [],
+    updates: [],
     url: ''
   };
 }

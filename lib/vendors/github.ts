@@ -6,6 +6,8 @@ import { VendorStatus, Incident } from "@/types";
  */
 export const GitHubAdapter = {
     name: "GitHub",
+    description: "Code hosting & CI/CD",
+    accentColor: "#2dba4e",
     id: "00000000-0000-4000-8000-000000000001",
 
     async fetchStatus(): Promise<VendorStatus> {

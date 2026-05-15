@@ -6,6 +6,8 @@ import { VendorStatus, Incident } from "@/types";
  */
 export const GitLabAdapter = {
     name: "GitLab",
+    description: "DevOps & CI/CD platform",
+    accentColor: "#fc6d26",
     id: "00000000-0000-4000-8000-000000000007",
 
     async fetchStatus(): Promise<VendorStatus> {

@@ -6,6 +6,8 @@ import { VendorStatus, Incident } from "@/types";
  */
 export const AWSAdapter = {
     name: "AWS",
+    description: "Amazon cloud platform",
+    accentColor: "#ff9900",
     id: "00000000-0000-4000-8000-000000000005",
 
     async fetchStatus(): Promise<VendorStatus> {

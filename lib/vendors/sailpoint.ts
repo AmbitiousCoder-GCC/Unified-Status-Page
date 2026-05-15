@@ -6,6 +6,8 @@ import { VendorStatus, Incident } from "@/types";
  */
 export const SailPointAdapter = {
     name: "SailPoint",
+    description: "Identity governance",
+    accentColor: "#0033a0",
     id: "00000000-0000-4000-8000-000000000011",
 
     async fetchStatus(): Promise<VendorStatus> {

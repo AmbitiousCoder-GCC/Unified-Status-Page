@@ -6,6 +6,8 @@ import { VendorStatus, Incident } from "@/types";
  */
 export const DatabricksAdapter = {
     name: "Databricks",
+    description: "Data & AI platform",
+    accentColor: "#ff3621",
     id: "00000000-0000-4000-8000-000000000008",
 
     async fetchStatus(): Promise<VendorStatus> {

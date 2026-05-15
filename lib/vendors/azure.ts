@@ -6,6 +6,8 @@ import { VendorStatus, Incident } from "@/types";
  */
 export const AzureAdapter = {
     name: "Azure",
+    description: "Microsoft cloud platform",
+    accentColor: "#0078d4",
     id: "00000000-0000-4000-8000-000000000003",
 
     async fetchStatus(): Promise<VendorStatus> {

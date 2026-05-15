@@ -6,6 +6,8 @@ import { VendorStatus, Incident } from "@/types";
  */
 export const GoogleCloudAdapter = {
     name: "Google Cloud",
+    description: "Google cloud services",
+    accentColor: "#4285f4",
     id: "00000000-0000-4000-8000-000000000004",
 
     async fetchStatus(): Promise<VendorStatus> {

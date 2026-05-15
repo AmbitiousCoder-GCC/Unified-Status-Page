@@ -6,6 +6,8 @@ import { VendorStatus, Incident } from "@/types";
  */
 export const CycodeAdapter = {
     name: "Cycode",
+    description: "Code security platform",
+    accentColor: "#6c5ce7",
     id: "00000000-0000-4000-8000-000000000012",
 
     async fetchStatus(): Promise<VendorStatus> {

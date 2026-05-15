@@ -134,6 +134,46 @@ export const VendorCard = ({ status, index, onClick }: VendorCardProps) => {
       {/* SPARKLINE */}
       <UptimeSparkline data={status.uptimeHistory} color={vendorConfig.accentColor} />
 
+      {/* 15-DAY STATUS GRID */}
+      <div className="mt-4">
+        <div className="flex justify-between items-center mb-1.5 px-0.5">
+          <span className="text-[9px] font-spacemono text-text-muted uppercase tracking-widest opacity-60">System History</span>
+          <span className="text-[9px] font-spacemono text-text-muted uppercase tracking-widest opacity-60">Today</span>
+        </div>
+        <div className="flex gap-[2px] h-4">
+          {Array.from({ length: 15 }).map((_, i) => {
+            // Data is ordered ASC, so 14 is today, 13 is yesterday, etc.
+            const day = status.uptimeHistory[i];
+            const isToday = i === 14;
+            
+            let bgColor = "bg-white/5";
+            let shadow = "";
+            
+            if (day) {
+              if (day.uptimePct >= 99.9) {
+                bgColor = "bg-green-500/50";
+                shadow = "0 0 5px rgba(34,197,94,0.1)";
+              } else if (day.uptimePct >= 95) {
+                bgColor = "bg-yellow-500/50";
+                shadow = "0 0 5px rgba(234,179,8,0.1)";
+              } else {
+                bgColor = "bg-red-500/70";
+                shadow = "0 0 8px rgba(239,68,68,0.3)";
+              }
+            }
+
+            return (
+              <div
+                key={i}
+                title={day ? `${day.date}: ${day.uptimePct}%` : "Calculating..."}
+                className={`flex-1 rounded-sm transition-all duration-300 ${bgColor} ${isToday ? "ring-1 ring-white/30" : ""}`}
+                style={{ boxShadow: shadow }}
+              />
+            );
+          })}
+        </div>
+      </div>
+
       {/* COMPONENT STATUS LIST */}
       <div className="mt-4 space-y-1">
         <div className="text-[9px] font-spacemono text-text-muted mb-2 uppercase tracking-widest opacity-80 border-b border-grid-line pb-1">

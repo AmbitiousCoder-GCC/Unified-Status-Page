@@ -33,59 +33,71 @@ export async function GET(
     });
   }
 
-  const vendorConfig = VENDORS_LIST.find(v => v.id === vendorId);
-
   const db = getDbClient();
 
   try {
-    const { rows: vendorsRows } = await db.query('SELECT * FROM vendors WHERE id = $1', [vendorId]);
-    
-    if (vendorsRows.length === 0) {
-      // Fallback if DB not seeded
-      return NextResponse.json({ error: "Vendor not initialized in database" }, { status: 404 });
-    }
-
+    // 1. Get latest status
     const { rows: statusRows } = await db.query(
-      `SELECT status, timestamp, raw_data FROM status_checks WHERE vendor_id = $1 ORDER BY timestamp DESC LIMIT 1`,
+      `SELECT status, description, last_checked FROM vendor_status WHERE vendor_id = $1`,
       [vendorId]
     );
     
+    // 2. Get uptime history (last 15 days)
+    const { rows: historyRows } = await db.query(
+      `SELECT date::text, uptime_pct as "uptimePct" FROM uptime_daily 
+       WHERE vendor_id = $1 
+       ORDER BY date DESC LIMIT 15`,
+      [vendorId]
+    );
+
+    // 3. Get aggregate uptime (15 days)
+    const { rows: aggRows } = await db.query(
+      `SELECT SUM(total_checks) as total, SUM(failed_checks) as failed 
+       FROM uptime_daily 
+       WHERE vendor_id = $1 AND date >= CURRENT_DATE - INTERVAL '15 days'`,
+      [vendorId]
+    );
+    
+    // 4. Get active incidents
     const { rows: activeIncRows } = await db.query(
-      `SELECT * FROM incidents WHERE vendor_id = $1 AND status != 'resolved'`,
+      `SELECT * FROM incidents WHERE vendor_id = $1 AND status != 'resolved' ORDER BY created_at DESC`,
       [vendorId]
     );
     
+    // 5. Get past resolved incidents (last 5)
     const { rows: pastIncRows } = await db.query(
-      `SELECT * FROM incidents WHERE vendor_id = $1 AND status = 'resolved' ORDER BY resolved_at DESC LIMIT 5`,
-      [vendorId]
-    );
-    
-    const { rows: uptimeRows } = await db.query(
-      `SELECT date, uptime_pct FROM uptime_daily WHERE vendor_id = $1 ORDER BY date DESC LIMIT 15`,
+      `SELECT * FROM incidents WHERE vendor_id = $1 AND status = 'resolved' ORDER BY updated_at DESC LIMIT 5`,
       [vendorId]
     );
 
     const latestStatus = statusRows.length > 0 ? statusRows[0] : null;
-    const fetchedAt = latestStatus ? new Date(latestStatus.timestamp).toISOString() : new Date().toISOString();
-    const overallStatus = latestStatus ? latestStatus.status : 'unknown';
-
-    let uptimePct15d = 100;
-    const uptimeHistory: DayUptime[] = uptimeRows.map(row => ({
-      date: new Date(row.date).toISOString().split('T')[0],
-      uptimePct: Number(row.uptime_pct)
-    }));
-
-    if (uptimeHistory.length > 0) {
-      uptimePct15d = uptimeHistory.reduce((acc, curr) => acc + curr.uptimePct, 0) / uptimeHistory.length;
+    const fetchedAt = latestStatus ? new Date(latestStatus.last_checked).toISOString() : new Date().toISOString();
+    
+    function mapStatus(dbStatus: string | null): VendorStatus['overallStatus'] {
+      if (!dbStatus) return 'unknown';
+      const lower = dbStatus.toLowerCase();
+      if (lower === 'operational') return 'operational';
+      if (lower === 'degraded') return 'degraded';
+      if (lower === 'outage') return 'major_outage';
+      return 'unknown';
     }
+
+    const overallStatus = mapStatus(latestStatus?.status);
+    
+    const total = Number(aggRows[0]?.total || 0);
+    const failed = Number(aggRows[0]?.failed || 0);
+    const uptimePct15d = total > 0 ? Number((((total - failed) / total) * 100).toFixed(2)) : 100;
 
     const statusData: VendorStatus = {
       vendorId,
       fetchedAt,
-      overallStatus: overallStatus as any,
-      statusDescription: overallStatus === 'operational' ? 'All Systems Operational' : `Current status: ${overallStatus}`,
+      overallStatus,
+      statusDescription: latestStatus?.description || (overallStatus === 'operational' ? 'All Systems Operational' : `Current status: ${overallStatus}`),
       uptimePct15d,
-      uptimeHistory: uptimeHistory.reverse(),
+      uptimeHistory: historyRows.reverse().map(h => ({
+        date: h.date,
+        uptimePct: Number(h.uptimePct)
+      })),
       activeIncidents: activeIncRows.map(mapIncidentFromDb),
       pastIncidents: pastIncRows.map(mapIncidentFromDb),
       scheduledMaintenances: [],
@@ -93,42 +105,25 @@ export async function GET(
     };
 
     return NextResponse.json(statusData, {
-      headers: {
-        "Cache-Control": "max-age=30",
-      },
+      headers: { "Cache-Control": "max-age=30" },
     });
 
-  } catch (error: any) {
-    console.error(`Error fetching status for ${vendorId} from DB:`, error.message);
-    
-    return NextResponse.json({
-      vendorId,
-      fetchedAt: new Date().toISOString(),
-      overallStatus: "unknown",
-      statusDescription: "Failed to fetch status from database",
-      uptimePct15d: 100,
-      uptimeHistory: [],
-      activeIncidents: [],
-      pastIncidents: [],
-      scheduledMaintenances: [],
-      components: []
-    }, { 
-      status: 200, 
-      headers: { "Cache-Control": "max-age=30" } 
-    });
+  } catch (error: unknown) {
+    console.error(`Error fetching status for ${vendorId}:`, error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
 
-function mapIncidentFromDb(row: any) {
+function mapIncidentFromDb(row: Record<string, unknown>): import('@/types/status').Incident {
   return {
-    id: row.id,
-    title: row.title,
-    severity: row.severity,
-    status: row.status,
-    startedAt: new Date(row.started_at).toISOString(),
-    resolvedAt: row.resolved_at ? new Date(row.resolved_at).toISOString() : undefined,
-    affectedComponents: row.affected_components || [],
-    updates: row.raw_data || [],
+    id: String(row.id || ''),
+    title: String(row.name || ''),
+    severity: (String(row.impact || 'minor')) as 'critical' | 'major' | 'minor' | 'maintenance',
+    status: (String(row.status || 'investigating')) as 'investigating' | 'identified' | 'monitoring' | 'resolved',
+    startedAt: row.created_at ? new Date(String(row.created_at)).toISOString() : new Date().toISOString(),
+    resolvedAt: row.updated_at ? new Date(String(row.updated_at)).toISOString() : undefined,
+    affectedComponents: [],
+    updates: [],
     url: ''
   };
 }

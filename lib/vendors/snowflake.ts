@@ -6,6 +6,8 @@ import { VendorStatus, Incident } from "@/types";
  */
 export const SnowflakeAdapter = {
     name: "Snowflake",
+    description: "Cloud data warehouse",
+    accentColor: "#29b5e8",
     id: "00000000-0000-4000-8000-000000000010",
 
     async fetchStatus(): Promise<VendorStatus> {
