@@ -1,6 +1,19 @@
 import { ParseResult, StatusParser } from './types';
 import { ComponentStatus, StatusLevel } from '@/types/status';
 
+export async function fetchWithRetry(url: string, maxRetries = 3): Promise<string> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (res.ok) return await res.text();
+    } catch (err) {
+      if (i === maxRetries - 1) throw err;
+      await new Promise(r => setTimeout(r, Math.pow(2, i) * 1000)); // 1s, 2s, 4s
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
+
 export class Auth0ScrapeParser implements StatusParser {
   constructor(public readonly vendorId: string, public readonly vendorName: string) {}
 
