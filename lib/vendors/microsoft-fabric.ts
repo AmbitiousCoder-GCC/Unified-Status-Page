@@ -1,4 +1,4 @@
-import { VendorStatus, Incident } from "@/types/status";
+import { VendorStatus, Incident } from "@/types";
 
 /**
  * Adapter for Microsoft Fabric Status (Scraper)
