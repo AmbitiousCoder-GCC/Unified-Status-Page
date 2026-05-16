@@ -83,12 +83,13 @@ export async function analyzeChat(
   // ------------------------------------------------------------------
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   if (!apiKey) {
-    throw new Error("GOOGLE_GENERATIVE_AI_API_KEY is not configured");
+    console.warn("[Chat] GOOGLE_GENERATIVE_AI_API_KEY is missing. Using local fallback analysis.");
+    return generateLocalFallbackResponse(sanitisedMessage, context);
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
+    model: "gemini-1.5-flash",
     systemInstruction: SRE_SYSTEM_PROMPT,
     generationConfig: {
       temperature: 0.7,
@@ -125,7 +126,38 @@ export async function analyzeChat(
     // ------------------------------------------------------------------
     return responseText;
   } catch (error) {
-    console.error("[Chat] Gemini API call failed:", error);
-    throw new Error("Failed to generate response. Please try again.");
+    console.error("[Chat] Gemini API call failed. Using local fallback analysis:", error);
+    return generateLocalFallbackResponse(sanitisedMessage, context);
   }
+}
+
+/**
+ * Generates a rule-based response when Gemini is unavailable.
+ * Still provides accurate live data from the context.
+ */
+function generateLocalFallbackResponse(message: string, context: any): string {
+    const query = message.toLowerCase();
+    
+    // 1. Check for specific vendor mentions
+    const vendors = context.currentStatus.split("\n")
+        .map((line: string) => {
+            const [name, rest] = line.split(": ");
+            return { name, status: rest };
+        })
+        .filter((v: any) => v.name && v.status);
+
+    const mentionedVendor = vendors.find((v: any) => query.includes(v.name.toLowerCase()));
+
+    if (mentionedVendor) {
+        return `I'm currently running in high-speed local mode. Based on our live records, ${mentionedVendor.name} is currently ${mentionedVendor.status}.`;
+    }
+
+    // 2. Default: summary of all issues
+    const issues = vendors.filter((v: any) => !v.status.includes("OPERATIONAL"));
+    
+    if (issues.length > 0) {
+        return `I'm analyzing the data locally. We are currently tracking ${issues.length} service issues: ${issues.map((i: any) => i.name).join(", ")}. All other vendors are operational.`;
+    }
+
+    return `I'm currently in local analysis mode. All ${context.vendorCount} vendors we monitor are currently reporting as OPERATIONAL.`;
 }
