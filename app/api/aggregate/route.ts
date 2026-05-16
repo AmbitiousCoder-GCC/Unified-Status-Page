@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDbClient } from "@/lib/db/client";
-import { VendorStatus } from "@/types/status";
+import { VendorStatus, Incident } from "@/types/status";
 import { VENDORS_LIST } from "@/lib/vendors";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function GET(request: NextRequest) {
-  const db = getDbClient();
-  
   try {
+    const db = getDbClient();
+    if (!db) {
+      throw new Error("Database client not initialized");
+    }
+
     // Optimized query: Standard correlated subqueries instead of sub-selects in FROM clause
-    // This is more compatible across different PostgreSQL versions and environments
     const { rows } = await db.query(`
       SELECT
         v.id as vendor_id,
@@ -76,7 +78,7 @@ export async function GET(request: NextRequest) {
         uptimeHistory: (row.uptime_history || []).map((d: any) => ({
             date: String(d.date),
             uptimePct: Number(d.uptimePct)
-        })).reverse(), // UI expects ascending order
+        })).reverse(),
         activeIncidents: (row.active_incidents || []).map(mapJsonbIncident),
         pastIncidents: (row.past_incidents || []).map(mapJsonbIncident),
         scheduledMaintenances: [],
@@ -87,10 +89,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(statuses);
 
   } catch (error: any) {
-    console.error("[Aggregate] SQL Error:", error);
-    // FALLBACK: Return placeholders but include error info for debugging
+    console.error("[Aggregate] Runtime Error:", error);
+    // FALLBACK: Return placeholders but include error info. Use 200 to keep UI alive but show error.
     return NextResponse.json(
-      VENDORS_LIST.map(v => generatePlaceholder(v.id, `Database Error: ${error.message}`))
+      VENDORS_LIST.map(v => generatePlaceholder(v.id, `Service unavailable: ${error.message}`)),
+      { status: 200 } // We use 200 to allow the frontend to render the placeholder state
     );
   }
 }
@@ -120,7 +123,7 @@ function generatePlaceholder(vendorId: string, msg: string): VendorStatus {
   };
 }
 
-function mapJsonbIncident(row: any): import('@/types/status').Incident {
+function mapJsonbIncident(row: any): Incident {
   return {
     id: String(row.id || ''),
     title: String(row.title || ''),
@@ -133,4 +136,5 @@ function mapJsonbIncident(row: any): import('@/types/status').Incident {
     url: ''
   };
 }
+
 
