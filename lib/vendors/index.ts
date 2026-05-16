@@ -6,7 +6,7 @@ import { AWSAdapter } from "./aws";
 import { CloudflareAdapter } from "./cloudflare";
 import { GitLabAdapter } from "./gitlab";
 import { DatabricksAdapter } from "./databricks";
-import { Auth0Adapter } from "./auth0";
+
 import { SnowflakeAdapter } from "./snowflake";
 import { SailPointAdapter } from "./sailpoint";
 import { CycodeAdapter } from "./cycode";
@@ -24,7 +24,7 @@ export const VENDORS: Record<string, any> = {
     cloudflare: CloudflareAdapter,
     gitlab: GitLabAdapter,
     databricks: DatabricksAdapter,
-    auth0: Auth0Adapter,
+
     snowflake: SnowflakeAdapter,
     sailpoint: SailPointAdapter,
     cycode: CycodeAdapter,
