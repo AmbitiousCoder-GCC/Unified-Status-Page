@@ -2,11 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDbClient } from "@/lib/db/client";
 import { VendorStatus, Incident } from "@/types/status";
 import { VENDORS_LIST } from "@/lib/vendors";
+import { checkRateLimit, aggregateRateLimit } from "../rate-limit";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function GET(request: NextRequest) {
+  // Rate limiting
+  const ip = request.headers.get("x-forwarded-for") || "anonymous";
+  const { success } = await checkRateLimit(aggregateRateLimit, `agg_${ip}`);
+  if (!success) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   try {
     const db = getDbClient();
     if (!db) {

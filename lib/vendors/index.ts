@@ -10,6 +10,7 @@ import { DatabricksAdapter } from "./databricks";
 import { SnowflakeAdapter } from "./snowflake";
 import { SailPointAdapter } from "./sailpoint";
 import { CycodeAdapter } from "./cycode";
+import { MicrosoftFabricAdapter } from "./microsoft-fabric";
 import { updateVendorStatus } from "@/lib/db/queries";
 
 /**
@@ -28,6 +29,7 @@ export const VENDORS: Record<string, any> = {
     snowflake: SnowflakeAdapter,
     sailpoint: SailPointAdapter,
     cycode: CycodeAdapter,
+    fabric: MicrosoftFabricAdapter,
 };
 
 /**
