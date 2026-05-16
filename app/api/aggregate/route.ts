@@ -3,7 +3,7 @@ import { getDbClient } from "@/lib/db/client";
 import { VendorStatus, DayUptime } from "@/types/status";
 import { VENDORS_LIST, refreshVendorData } from "@/lib/vendors";
 import { aggregateRateLimit, checkRateLimit } from "@/app/api/rate-limit";
-import { waitUntil } from "next/server";
+import { after } from "next/server";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -111,7 +111,9 @@ export async function GET(request: NextRequest) {
        } else {
          // Background sync using Next.js 15 waitUntil
          // This returns the response immediately and keeps the sync running safely
-         waitUntil(refreshVendorData().catch(e => console.error("[Sync] Background sync failed:", e)));
+         after(() => {
+           refreshVendorData().catch(e => console.error("[Sync] Background sync failed:", e));
+         });
        }
     }
 
