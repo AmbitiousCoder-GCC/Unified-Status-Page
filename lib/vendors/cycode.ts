@@ -12,7 +12,7 @@ export const CycodeAdapter = {
 
     async fetchStatus(): Promise<VendorStatus> {
         try {
-            const response = await fetch("https://status.cycode.com/api/v2/status.json", {
+            const response = await fetch("https://cycode.statuspage.io/api/v2/summary.json", {
                 signal: AbortSignal.timeout(5000),
                 headers: { "User-Agent": "status-page-monitor" }
             });

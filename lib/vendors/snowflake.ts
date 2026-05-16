@@ -12,7 +12,7 @@ export const SnowflakeAdapter = {
 
     async fetchStatus(): Promise<VendorStatus> {
         try {
-            const response = await fetch("https://status.snowflakecomputing.com/api/v2/status.json", {
+            const response = await fetch("https://snowflake.statuspage.io/api/v2/summary.json", {
                 signal: AbortSignal.timeout(5000),
                 headers: { "User-Agent": "status-page-monitor" }
             });
