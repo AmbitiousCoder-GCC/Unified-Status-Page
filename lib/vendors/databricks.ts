@@ -12,7 +12,7 @@ export const DatabricksAdapter = {
 
     async fetchStatus(): Promise<VendorStatus> {
         try {
-            const response = await fetch("https://status.databricks.com/api/v2/status.json", {
+            const response = await fetch("https://databricks.statuspage.io/api/v2/status.json", {
                 signal: AbortSignal.timeout(5000),
                 headers: { "User-Agent": "status-page-monitor" }
             });

@@ -12,7 +12,7 @@ export const Auth0Adapter = {
 
     async fetchStatus(): Promise<VendorStatus> {
         try {
-            const response = await fetch("https://status.auth0.com/api/v2/status.json", {
+            const response = await fetch("https://auth0.statuspage.io/api/v2/status.json", {
                 signal: AbortSignal.timeout(5000),
                 headers: { "User-Agent": "status-page-monitor" }
             });
