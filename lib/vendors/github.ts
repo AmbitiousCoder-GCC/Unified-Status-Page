@@ -54,10 +54,22 @@ export const GitHubAdapter = {
             updated_at: new Date(inc.updated_at)
         }));
 
+        // Determine status: Trust the indicator, but if there's a non-resolved incident, mark as DEGRADED
+        const hasActiveIncident = incidents.some(inc => 
+            inc.status.toLowerCase() !== "resolved" && 
+            inc.status.toLowerCase() !== "completed" &&
+            inc.status.toLowerCase() !== "postmortem"
+        );
+
+        let status = statusMap[data.status?.indicator] || "OPERATIONAL";
+        if (status === "OPERATIONAL" && hasActiveIncident) {
+            status = "DEGRADED";
+        }
+
         return {
             vendor_id: this.id,
-            status: statusMap[data.status?.indicator] || "OPERATIONAL",
-            description: data.status?.description || "All systems operational",
+            status,
+            description: status === "OPERATIONAL" ? "All systems operational" : (hasActiveIncident ? "Active incident reported" : data.status?.description),
             lastChecked: new Date(),
             incidents
         };

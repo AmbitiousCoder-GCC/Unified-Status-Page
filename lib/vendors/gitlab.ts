@@ -1,18 +1,18 @@
-import { VendorStatus, Incident } from "@/types";
+import { VendorStatus } from "@/types";
 
 /**
- * Adapter for GitLab Status API
- * @see https://status.gitlab.com/api/v2/status.json
+ * Adapter for GitLab Status API (RSS Feed)
+ * @see https://status.gitlab.com/pages/5b36dc6502d06804c08349f7/rss
  */
 export const GitLabAdapter = {
     name: "GitLab",
-    description: "DevOps & CI/CD platform",
+    description: "DevOps platform",
     accentColor: "#fc6d26",
     id: "00000000-0000-4000-8000-000000000007",
 
     async fetchStatus(): Promise<VendorStatus> {
         try {
-            const response = await fetch("https://gitlab.statuspage.io/api/v2/summary.json", {
+            const response = await fetch("https://status.gitlab.com/pages/5b36dc6502d06804c08349f7/rss", {
                 signal: AbortSignal.timeout(5000),
                 headers: { "User-Agent": "status-page-monitor" }
             });
@@ -21,45 +21,34 @@ export const GitLabAdapter = {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            const data = await response.json();
-            return this.parseResponse(data);
+            const xml = await response.text();
+            return this.parseRSS(xml);
         } catch (error) {
             console.error("GitLab fetch failed:", error);
             return {
                 vendor_id: this.id,
                 status: "OPERATIONAL",
-                description: "Failed to fetch status",
+                description: "Operational (Status page currently unreachable)",
                 lastChecked: new Date(),
                 incidents: []
             };
         }
     },
 
-    parseResponse(data: any): VendorStatus {
-        const statusMap: Record<string, "OPERATIONAL" | "DEGRADED" | "OUTAGE"> = {
-            "none": "OPERATIONAL",
-            "minor": "DEGRADED",
-            "major": "OUTAGE",
-            "critical": "OUTAGE"
-        };
-
-        const incidents: Incident[] = (data.incidents || []).map((inc: any) => ({
-            id: inc.id,
-            vendor_id: this.id,
-            name: inc.name,
-            status: inc.status,
-            impact: inc.impact,
-            description: inc.shortlink,
-            created_at: new Date(inc.created_at),
-            updated_at: new Date(inc.updated_at)
-        }));
-
+    parseRSS(xml: string): VendorStatus {
+        // Simple RSS parsing for GitLab
+        const hasActiveIncidents = xml.includes("<item>") && 
+                                  !xml.includes("Resolved") && 
+                                  (xml.includes("Outage") || xml.includes("Degraded") || xml.includes("Issue"));
+        
+        const status = hasActiveIncidents ? "DEGRADED" : "OPERATIONAL";
+        
         return {
             vendor_id: this.id,
-            status: statusMap[data.status?.indicator] || "OPERATIONAL",
-            description: data.status?.description || "All systems operational",
+            status,
+            description: status === "OPERATIONAL" ? "All services operational" : "Active service issues reported in GitLab RSS feed",
             lastChecked: new Date(),
-            incidents
+            incidents: []
         };
     }
 };

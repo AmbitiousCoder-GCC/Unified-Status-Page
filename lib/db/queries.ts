@@ -79,8 +79,8 @@ export async function updateVendorStatus(
             VALUES (${vendorId}, ${status}, NOW())
         `;
 
-        // Update daily uptime aggregate
-        const isFailed = status === 'OUTAGE' ? 1 : 0;
+        // Update daily uptime aggregate: Count both DEGRADED and OUTAGE as failures for the 100% metric
+        const isFailed = (status === 'OUTAGE' || status === 'DEGRADED') ? 1 : 0;
         const initialUptime = isFailed ? 0 : 100;
         await sql`
             INSERT INTO uptime_daily (vendor_id, date, total_checks, failed_checks, uptime_pct)

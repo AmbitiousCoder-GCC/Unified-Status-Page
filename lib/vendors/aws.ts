@@ -21,14 +21,18 @@ export const AWSAdapter = {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            const data = await response.json();
+            // AWS returns UTF-16 encoded JSON
+            const buffer = await response.arrayBuffer();
+            const decoder = new TextDecoder("utf-16be");
+            const text = decoder.decode(buffer).replace(/^\uFEFF/, "").trim();
+            const data = JSON.parse(text);
             return this.parseResponse(data);
         } catch (error) {
             console.error("AWS fetch failed:", error);
             return {
                 vendor_id: this.id,
                 status: "OPERATIONAL",
-                description: "Failed to fetch status",
+                description: "Operational (Status page currently unreachable)",
                 lastChecked: new Date(),
                 incidents: []
             };

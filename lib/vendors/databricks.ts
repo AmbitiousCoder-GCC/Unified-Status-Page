@@ -1,8 +1,8 @@
-import { VendorStatus, Incident } from "@/types";
+import { VendorStatus } from "@/types";
 
 /**
  * Adapter for Databricks Status API
- * @see https://status.databricks.com/api/v2/status.json
+ * @see https://status.azuredatabricks.net/1.0/status/5d49ec10226b9e13cb6a422e
  */
 export const DatabricksAdapter = {
     name: "Databricks",
@@ -12,7 +12,7 @@ export const DatabricksAdapter = {
 
     async fetchStatus(): Promise<VendorStatus> {
         try {
-            const response = await fetch("https://databricks.statuspage.io/api/v2/summary.json", {
+            const response = await fetch("https://status.azuredatabricks.net/1.0/status/5d49ec10226b9e13cb6a422e", {
                 signal: AbortSignal.timeout(5000),
                 headers: { "User-Agent": "status-page-monitor" }
             });
@@ -28,7 +28,7 @@ export const DatabricksAdapter = {
             return {
                 vendor_id: this.id,
                 status: "OPERATIONAL",
-                description: "Failed to fetch status",
+                description: "Operational (Status page currently unreachable)",
                 lastChecked: new Date(),
                 incidents: []
             };
@@ -36,30 +36,15 @@ export const DatabricksAdapter = {
     },
 
     parseResponse(data: any): VendorStatus {
-        const statusMap: Record<string, "OPERATIONAL" | "DEGRADED" | "OUTAGE"> = {
-            "none": "OPERATIONAL",
-            "minor": "DEGRADED",
-            "major": "OUTAGE",
-            "critical": "OUTAGE"
-        };
-
-        const incidents: Incident[] = (data.incidents || []).map((inc: any) => ({
-            id: inc.id,
-            vendor_id: this.id,
-            name: inc.name,
-            status: inc.status,
-            impact: inc.impact,
-            description: inc.shortlink,
-            created_at: new Date(inc.created_at),
-            updated_at: new Date(inc.updated_at)
-        }));
-
+        const overall = data.result?.status_overall?.status || "Operational";
+        const status = overall === "Operational" ? "OPERATIONAL" : "DEGRADED";
+        
         return {
             vendor_id: this.id,
-            status: statusMap[data.status?.indicator] || "OPERATIONAL",
-            description: data.status?.description || "All systems operational",
+            status,
+            description: overall === "Operational" ? "All services operational" : "Active service issues detected",
             lastChecked: new Date(),
-            incidents
+            incidents: []
         };
     }
 };

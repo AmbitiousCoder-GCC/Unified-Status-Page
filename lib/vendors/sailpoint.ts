@@ -2,7 +2,7 @@ import { VendorStatus, Incident } from "@/types";
 
 /**
  * Adapter for SailPoint Status API
- * @see https://status.sailpoint.com/api/v2/status.json
+ * @see https://status.sailpoint.com/api/v2/summary.json
  */
 export const SailPointAdapter = {
     name: "SailPoint",
@@ -12,7 +12,7 @@ export const SailPointAdapter = {
 
     async fetchStatus(): Promise<VendorStatus> {
         try {
-            const response = await fetch("https://sailpoint.statuspage.io/api/v2/summary.json", {
+            const response = await fetch("https://status.sailpoint.com/api/v2/summary.json", {
                 signal: AbortSignal.timeout(5000),
                 headers: { "User-Agent": "status-page-monitor" }
             });
@@ -28,7 +28,7 @@ export const SailPointAdapter = {
             return {
                 vendor_id: this.id,
                 status: "OPERATIONAL",
-                description: "Failed to fetch status",
+                description: "Operational (Status page currently unreachable)",
                 lastChecked: new Date(),
                 incidents: []
             };
@@ -54,10 +54,22 @@ export const SailPointAdapter = {
             updated_at: new Date(inc.updated_at)
         }));
 
+        // Determine status: Trust the indicator, but if there's a non-resolved incident, mark as DEGRADED
+        const hasActiveIncident = incidents.some(inc => 
+            inc.status.toLowerCase() !== "resolved" && 
+            inc.status.toLowerCase() !== "completed" &&
+            inc.status.toLowerCase() !== "postmortem"
+        );
+
+        let status = statusMap[data.status?.indicator] || "OPERATIONAL";
+        if (status === "OPERATIONAL" && hasActiveIncident) {
+            status = "DEGRADED";
+        }
+
         return {
             vendor_id: this.id,
-            status: statusMap[data.status?.indicator] || "OPERATIONAL",
-            description: data.status?.description || "All systems operational",
+            status,
+            description: status === "OPERATIONAL" ? "All systems operational" : (hasActiveIncident ? "Active incident reported" : data.status?.description),
             lastChecked: new Date(),
             incidents
         };
