@@ -3,13 +3,11 @@ import { getDbClient } from "@/lib/db/client";
 import { VendorStatus, DayUptime } from "@/types/status";
 import { VENDORS_LIST, refreshVendorData } from "@/lib/vendors";
 import { aggregateRateLimit, checkRateLimit } from "@/app/api/rate-limit";
+import { waitUntil } from "next/server";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-/**
- * Single CTE query that fetches all vendor data in 1 round-trip.
- */
 const AGGREGATE_QUERY = `
 WITH active_incidents AS (
   SELECT vendor_id, jsonb_agg(jsonb_build_object(
@@ -72,56 +70,55 @@ ORDER BY v.name ASC
 `;
 
 export async function GET(request: NextRequest) {
-  // 1. Rate Limiting with Soft Failure
   try {
     const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
     const { success } = await checkRateLimit(aggregateRateLimit, ip);
-    if (!success) {
-      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
-    }
-  } catch (rlError) {
-    console.warn("[RateLimit] Upstash connection failed, bypassing rate limit for availability.", rlError);
+    if (!success) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  } catch (e) {
+    console.error("[RateLimit] Error:", e);
   }
 
   const db = getDbClient();
 
   try {
-    // 2. Database Fetch
     let { rows } = await db.query(AGGREGATE_QUERY);
 
-    // 3. Lazy Sync Logic
-    try {
-      const latestFetchedAt = rows.length > 0 
-        ? Math.max(...rows.map(r => r.fetched_at ? new Date(r.fetched_at).getTime() : 0))
-        : 0;
-      
-      const isStale = (Date.now() - latestFetchedAt) > 5 * 60 * 1000;
-      
-      if (isStale || rows.length === 0) {
-         if (rows.length === 0) {
-           // Synchronous refresh with timeout for empty DB
-           await Promise.race([
-             refreshVendorData(),
-             new Promise((_, reject) => setTimeout(() => reject(new Error("Refresh Timeout")), 7000))
-           ]).catch(e => console.error("[SyncRefresh] Failed:", e));
-           
-           const fresh = await db.query(AGGREGATE_QUERY);
-           rows = fresh.rows;
-         } else {
-           // Background refresh for stale DB
-           refreshVendorData().catch(e => console.error("[BgRefresh] Failed:", e));
-         }
-      }
-    } catch (refreshErr) {
-      console.error("[LazySync] Error during refresh logic:", refreshErr);
+    // --- ENHANCED LAZY REFRESH ---
+    const latestFetchedAt = rows.length > 0 
+      ? Math.max(...rows.map(r => r.fetched_at ? new Date(r.fetched_at).getTime() : 0))
+      : 0;
+    
+    const timeSinceLastUpdate = Date.now() - latestFetchedAt;
+    const isStale = timeSinceLastUpdate > 5 * 60 * 1000;
+    const isVeryStale = timeSinceLastUpdate > 15 * 60 * 1000; // Trigger "Stale" warning in UI
+    
+    // Safety check: Only sync if no sync has happened in the last 1 minute
+    const syncLockActive = timeSinceLastUpdate < 60 * 1000;
+
+    if (!syncLockActive && (isStale || rows.length === 0)) {
+       console.log(`[Sync] Triggering refresh (Stale: ${isStale}, Empty: ${rows.length === 0})`);
+       
+       if (rows.length === 0) {
+         // Empty DB: Must wait for sync to provide a working page
+         // Increased timeout to 9s to give more room before Vercel kills it
+         await Promise.race([
+           refreshVendorData(),
+           new Promise((_, reject) => setTimeout(() => reject(new Error("Initial Sync Timeout")), 9000))
+         ]).catch(e => console.error("[Sync] Initial sync failed/timeout:", e));
+         
+         const fresh = await db.query(AGGREGATE_QUERY);
+         rows = fresh.rows;
+       } else {
+         // Background sync using Next.js 15 waitUntil
+         // This returns the response immediately and keeps the sync running safely
+         waitUntil(refreshVendorData().catch(e => console.error("[Sync] Background sync failed:", e)));
+       }
     }
 
-    // 4. Return Placeholder if still empty (Prevents frontend "Failed to load" error)
     if (rows.length === 0) {
-      return NextResponse.json(VENDORS_LIST.map(v => generatePlaceholder(v.id)));
+      return NextResponse.json(VENDORS_LIST.map(v => generatePlaceholder(v.id, "Initializing system...")));
     }
 
-    // 5. Normal Mapping
     const statuses: VendorStatus[] = rows.map(row => {
       const totalChecks = Number(row.total_checks);
       const failedChecks = Number(row.failed_checks);
@@ -133,7 +130,7 @@ export async function GET(request: NextRequest) {
         vendorId: row.vendor_id,
         fetchedAt: row.fetched_at ? new Date(row.fetched_at).toISOString() : new Date().toISOString(),
         overallStatus: mapStatus(row.latest_status),
-        statusDescription: row.description || "System status reported by vendor",
+        statusDescription: row.description || "Vendor status operational",
         uptimePct15d,
         uptimeHistory: (row.uptime_history as DayUptime[]).map(d => ({
             ...d,
@@ -149,9 +146,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(statuses);
 
   } catch (error: unknown) {
-    console.error("[Aggregate] Fatal error:", error);
-    // 6. ULTIMATE FALLBACK: Return cached/static placeholders so UI doesn't crash
-    return NextResponse.json(VENDORS_LIST.map(v => generatePlaceholder(v.id)));
+    console.error("[Aggregate] Fatal Error:", error);
+    return NextResponse.json(VENDORS_LIST.map(v => generatePlaceholder(v.id, "Database connection unavailable.")));
   }
 }
 
@@ -164,12 +160,12 @@ function mapStatus(dbStatus: string | null): VendorStatus['overallStatus'] {
   return 'unknown';
 }
 
-function generatePlaceholder(vendorId: string): VendorStatus {
+function generatePlaceholder(vendorId: string, msg: string): VendorStatus {
   return {
     vendorId,
     fetchedAt: new Date().toISOString(),
     overallStatus: "unknown",
-    statusDescription: "Data currently calibrating or vendor unreachable.",
+    statusDescription: msg,
     uptimePct15d: 100,
     uptimeHistory: [],
     activeIncidents: [],
