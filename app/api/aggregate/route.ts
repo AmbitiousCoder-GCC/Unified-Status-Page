@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDbClient } from "@/lib/db/client";
 import { VendorStatus, DayUptime } from "@/types/status";
-import { VENDORS_LIST, refreshVendorData } from "@/lib/vendors";
-import { aggregateRateLimit, checkRateLimit } from "@/app/api/rate-limit";
-import { after } from "next/server";
+import { VENDORS_LIST } from "@/lib/vendors";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -70,55 +68,13 @@ ORDER BY v.name ASC
 `;
 
 export async function GET(request: NextRequest) {
-  try {
-    const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
-    const { success } = await checkRateLimit(aggregateRateLimit, ip);
-    if (!success) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
-  } catch (e) {
-    console.error("[RateLimit] Error:", e);
-  }
-
   const db = getDbClient();
 
   try {
-    let { rows } = await db.query(AGGREGATE_QUERY);
+    const { rows } = await db.query(AGGREGATE_QUERY);
 
-    // --- ENHANCED LAZY REFRESH ---
-    const latestFetchedAt = rows.length > 0 
-      ? Math.max(...rows.map(r => r.fetched_at ? new Date(r.fetched_at).getTime() : 0))
-      : 0;
-    
-    const timeSinceLastUpdate = Date.now() - latestFetchedAt;
-    const isStale = timeSinceLastUpdate > 5 * 60 * 1000;
-    const isVeryStale = timeSinceLastUpdate > 15 * 60 * 1000; // Trigger "Stale" warning in UI
-    
-    // Safety check: Only sync if no sync has happened in the last 1 minute
-    const syncLockActive = timeSinceLastUpdate < 60 * 1000;
-
-    if (!syncLockActive && (isStale || rows.length === 0)) {
-       console.log(`[Sync] Triggering refresh (Stale: ${isStale}, Empty: ${rows.length === 0})`);
-       
-       if (rows.length === 0) {
-         // Empty DB: Must wait for sync to provide a working page
-         // Increased timeout to 9s to give more room before Vercel kills it
-         await Promise.race([
-           refreshVendorData(),
-           new Promise((_, reject) => setTimeout(() => reject(new Error("Initial Sync Timeout")), 9000))
-         ]).catch(e => console.error("[Sync] Initial sync failed/timeout:", e));
-         
-         const fresh = await db.query(AGGREGATE_QUERY);
-         rows = fresh.rows;
-       } else {
-         // Background sync using Next.js 15 waitUntil
-         // This returns the response immediately and keeps the sync running safely
-         after(() => {
-           refreshVendorData().catch(e => console.error("[Sync] Background sync failed:", e));
-         });
-       }
-    }
-
-    if (rows.length === 0) {
-      return NextResponse.json(VENDORS_LIST.map(v => generatePlaceholder(v.id, "Initializing system...")));
+    if (!rows || rows.length === 0) {
+      return NextResponse.json(VENDORS_LIST.map(v => generatePlaceholder(v.id, "No data in database")));
     }
 
     const statuses: VendorStatus[] = rows.map(row => {
@@ -134,12 +90,12 @@ export async function GET(request: NextRequest) {
         overallStatus: mapStatus(row.latest_status),
         statusDescription: row.description || "Vendor status operational",
         uptimePct15d,
-        uptimeHistory: (row.uptime_history as DayUptime[]).map(d => ({
-            ...d,
+        uptimeHistory: (row.uptime_history || []).map((d: any) => ({
+            date: String(d.date),
             uptimePct: Number(d.uptimePct)
         })),
-        activeIncidents: (row.active_incidents as Array<Record<string, unknown>>).map(mapJsonbIncident),
-        pastIncidents: (row.past_incidents as Array<Record<string, unknown>>).map(mapJsonbIncident),
+        activeIncidents: (row.active_incidents || []).map(mapJsonbIncident),
+        pastIncidents: (row.past_incidents || []).map(mapJsonbIncident),
         scheduledMaintenances: [],
         components: []
       };
@@ -147,9 +103,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(statuses);
 
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error("[Aggregate] Fatal Error:", error);
-    return NextResponse.json(VENDORS_LIST.map(v => generatePlaceholder(v.id, "Database connection unavailable.")));
+    return NextResponse.json({ 
+        error: "Database connection failed", 
+        details: error.message 
+    }, { status: 500 });
   }
 }
 
@@ -177,7 +136,7 @@ function generatePlaceholder(vendorId: string, msg: string): VendorStatus {
   };
 }
 
-function mapJsonbIncident(row: Record<string, unknown>): import('@/types/status').Incident {
+function mapJsonbIncident(row: any): import('@/types/status').Incident {
   return {
     id: String(row.id || ''),
     title: String(row.title || ''),
